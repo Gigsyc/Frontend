@@ -23,7 +23,7 @@ Requires Node 20+. Stack: Next.js 16 (App Router) · React 19 · TypeScript · T
 
 ## Demo accounts
 
-Go to **[/login](http://localhost:3000/login)** and pick one of the four accounts — no password, no sign-up. The page lists each one with its name, role and seeded email address; clicking a row signs you straight in.
+Go to **[/login](http://localhost:3000/login)** and pick one of the four accounts — clicking a row signs you straight in, no password needed. The page lists each one with its name, role and seeded email address. Above the rows the same page also takes a real email and password, or a simulated Google or Apple identity, and **[/signup](http://localhost:3000/signup)** creates a new account that goes through verification and onboarding like any first-time visitor.
 
 | Account | Who | Lands on | What you can do |
 | --- | --- | --- | --- |
@@ -32,11 +32,11 @@ Go to **[/login](http://localhost:3000/login)** and pick one of the four account
 | **Professional** | **Aline Uwase**, hospitality student, 4.9★ over 42 shifts (`wk_aline`) | `/worker` | Browse and apply to open shifts, accept an invitation, check in by QR, track MoMo payouts and build a profile |
 | **Platform admin** | **Patrick Nsengimana**, GigSyc operations (`pu_patrick`) | `/admin` | Approve, reject, feature or pull events; manage destinations, users, partners and reports; read platform analytics and service status |
 
-`/login?as=<customer\|organizer\|worker\|admin>` preselects a row, which is how the marketing pages and the account menu link into it. An email the seed does not recognise still gets in, as the least privileged account (Explorer).
+`/login?as=<customer\|organizer\|worker\|admin>` preselects a row, which is how the marketing pages and the account menu link into it. An email the seed does not recognise is now rejected — sign-in goes through `authService`, so unknown addresses fail with "We don't recognise that email address." Create one at `/signup` instead.
 
 All four accounts share one live dataset, so an action on one side shows up on the others — confirm Aline for a shift as the partner, then switch and see it in her schedule; approve a pending event as the admin, then open `/events` and find it listed. Switch accounts any time from the account menu in the shell.
 
-The chosen persona is stored in `localStorage` under `gigsyc.prototype.session`. Deep links work without signing in — every `/events`, `/employer/*`, `/worker/*` and `/admin/*` route falls back to its demo persona so you can share a URL directly.
+The signed-in account is stored in `localStorage` under `gigsyc.prototype.auth`, and every persona (`useEmployerSession`, `useWorkerSession`, …) is derived from it. The public surfaces — `/`, `/events`, `/events/[slug]`, `/become-a-partner` — are open to anyone. The portals are not: `/employer/*` and `/worker/*` require a session and `/admin/*` requires the admin role, so a signed-out deep link lands on `/login?next=…` and returns to the page you asked for once you pick an account.
 
 ## Route map
 
@@ -48,7 +48,23 @@ The chosen persona is stored in `localStorage` under `gigsyc.prototype.session`.
 | `/business` | For businesses — the employer pitch |
 | `/workers` | For professionals — the worker pitch |
 | `/how-it-works` | End-to-end flow for both sides |
-| `/login` | Account picker — four demo accounts; `?as=customer\|organizer\|worker\|admin` preselects one |
+| `/become-a-partner` | Partner pitch — what GigSyc does for organisers, and the way into `/signup?role=partner` |
+
+**Accounts, sign-up and onboarding** — `src/app/login`, `signup`, `verify-email`, `forgot-password`, `reset-password`, `onboarding`, `account`, `partner`; centred auth shell
+
+| Route | Page |
+| --- | --- |
+| `/login` | Sign in — email and password, a simulated Google or Apple identity, or one of the four demo rows. `?as=customer\|organizer\|worker\|admin` preselects a row; `?next=` returns you to the page that bounced you |
+| `/signup` | Create an account — name, email, password with a strength meter, or a provider button. `?role=partner` signs you up as a partner; `?next=` is carried through verification and onboarding |
+| `/verify-email` | Six-digit code for the address on the account — resend on a 30s cooldown, or change the address. Nothing is sent and any six digits pass |
+| `/forgot-password` | Ask for reset instructions. The answer never reveals whether an address is registered |
+| `/reset-password` | Choose a new password. `?token=demo` stands in for the link the prototype would have emailed; without a token the page says the link is invalid |
+| `/onboarding` | Customer onboarding — where you are, what you like, and how you want to discover. Three questions and an optional fourth |
+| `/onboarding/partner` | Partner onboarding — organisation, contact, location. Finishing creates the `Employer` record and opens the workspace |
+| `/partner` | Partner home — forwards a finished partner into `/employer`, and everyone else wherever they belong |
+| `/account` | Your profile, interests, saved events and settings. Tabs via `?tab=profile\|interests\|saved\|settings`; a worker, partner or admin sees profile and settings only |
+
+Try: `/signup?role=partner`, `/login?next=%2Faccount`, `/reset-password?token=demo`, `/account?tab=saved`.
 
 **Public events** — `src/app/events`, site header/footer shell, mobile-first grid
 
@@ -145,6 +161,32 @@ Two rules keep the seam clean, and both are enforced by convention across every 
 
 **The mock store** (`src/lib/mock/store.ts`) behaves like a real HTTP backend so the UI never has to be rewritten: every method is `async`, returns cloned data, applies ~320ms of jittered latency, and throws a typed `MockApiError` with `not_found` / `conflict` / `network` / `validation` codes. State is seeded from `src/data/mocks/` (12 employers, 24 workers, 24 shifts and 43 events spanning past, present and future, plus 8 destinations, platform users, bookings, invoices, payouts, reports and notifications) and persisted to `localStorage` under `gigsyc.prototype.state.v5`. A stored day stamp means the data **re-seeds on the first visit each day**, so the demo never drifts too far from its intended shape.
 
+### Auth, verification and onboarding
+
+Identity is its own feature slice (`src/features/auth`), built on the same seam as the data layers above.
+
+- **`useAuth()`** (`auth-provider.tsx`) is the only way to read or change the session. It exposes `user`, the derived `persona`, `isAuthenticated`, and a **`ready`** flag that stays false until `localStorage` has been read on the client — every guard waits for it, which is what stops a signed-in visitor being bounced to `/login` on reload. Every mutation (`login`, `signup`, `loginWithGoogle`, `loginWithApple`, `verifyEmail`, `completeOnboarding`, `completePartnerOnboarding`, `updateUser`, `logout`) writes through one place, and `useSyncExternalStore` keeps every tab on the same session, stored under `gigsyc.prototype.auth`.
+- **`authService`** (`auth-service.ts`) is the identity seam, and the only file in the slice that touches the store — the same rule `api.ts` follows for domain data. Going live means rewriting these bodies and nothing above them: `signIn` becomes a credential POST, `signInWithGoogle` an OAuth code exchange. Note what the provider methods accept — an already-chosen identity, never a credential. No third-party password is ever typed into this app.
+- **`model.ts`** holds the routing rules as pure functions, written once rather than re-derived per page: `destinationForUser` (where a user belongs right now), `destinationAfterSignIn` (the same, with `?next=` applied), `onboardingPathForRole`, and `safeNext`, which follows only a same-origin path — one leading slash, never `//` or `/\`, both of which a browser reads as another host.
+- **The guards** (`guards.tsx`) apply those rules in the tree, on the client after hydration, because the session lives in `localStorage` and there is no server to check it in middleware. `RequireAuth` sends a signed-out visitor to `/login?next=…` (it wraps `/employer/*`, `/worker/*`, `/verify-email` and `/account`); `RequireRole` sends the wrong role to its own home (`/admin/*`, and both onboarding flows); `RedirectIfAuthenticated` walks an already-signed-in visitor past `/login` and `/signup`; `RequireOnboarding` keeps the onboarding routes open only while they are actually unfinished.
+
+**The journey.** `/signup` creates the account and signs it in; from there `destinationAfterSignIn` takes over, and the pending step always wins — an unverified address or unfinished onboarding outranks whatever `?next=` asked for, so a deep link can never walk past either:
+
+```
+  /signup ──► /verify-email ──► /onboarding ─────────────► /events      customer
+   │           six digits,       place, interests,
+   │           any six pass      discovery preference
+   │
+   │  ?role=partner              /onboarding/partner ────► /partner ──► /employer
+   │                             organisation, contact,    creates the Employer
+   │                             location                  record and the workspace
+   │
+   └─ Google / Apple ──► straight past /verify-email — the provider vouched for the
+                         address, so the account is created already verified
+```
+
+A professional's equivalent is `/worker/onboarding`. An admin has none: `onboardingPathForRole("admin")` returns `/admin`, and `/onboarding` is wrapped in `RequireRole roles={["customer"]}`, so the consumer flow is closed to every other role from both directions — and `RequireOnboarding` redirects anyone whose `onboardingCompleted` is already true.
+
 ### One event model, two audiences
 
 The public events site and the admin console are not two datasets. There is a single `Event` record (`src/types/events.ts`), and its `status` is the only switch between them:
@@ -180,7 +222,7 @@ export const shiftsApi = {
 };
 ```
 
-Keep returning the same domain types, and keep throwing errors with a human-readable `message` (the UI surfaces `err.message` in `ErrorState` and `toast.error`). Query keys, hooks, cache invalidation and every component stay untouched. Real auth would replace `src/features/session/session-provider.tsx`, whose `Persona` shape (`{ role, userId, employerId? }`) is what the rest of the app consumes via `useEmployerSession()` / `useWorkerSession()`.
+Keep returning the same domain types, and keep throwing errors with a human-readable `message` (the UI surfaces `err.message` in `ErrorState` and `toast.error`). Query keys, hooks, cache invalidation and every component stay untouched. Real auth swaps the same way, one file down: rewrite the bodies in `src/features/auth/auth-service.ts`. The `Persona` shape (`{ role, userId, employerId? }`) that the rest of the app consumes via `useEmployerSession()` / `useWorkerSession()` is derived from the signed-in `AuthUser` by `personaForUser` (`src/features/auth/model.ts`), so there is one identity to replace, not two.
 
 ## Folder structure
 
@@ -192,8 +234,13 @@ src/
 │   ├── employer/             Employer portal + employer shell layout
 │   ├── worker/               Worker app + worker shell layout
 │   ├── admin/                Admin console + admin shell layout
-│   ├── login/                Account picker
-│   ├── layout.tsx            Fonts, QueryProvider, SessionProvider, Toaster
+│   ├── login/  signup/       Sign in, create an account
+│   ├── verify-email/         Six-digit code step
+│   ├── forgot-password/  reset-password/
+│   ├── onboarding/           Customer flow + onboarding/partner
+│   ├── account/              Profile, interests, saved, settings
+│   ├── partner/  become-a-partner/
+│   ├── layout.tsx            Fonts, QueryProvider, AuthProvider, SessionProvider, Toaster
 │   ├── error.tsx  not-found.tsx
 │   └── globals.css           Tailwind v4 theme: the whole design system's tokens
 │
@@ -201,7 +248,10 @@ src/
 │   ├── <feature>/api.ts      Service layer (the swap point for a real API)
 │   ├── <feature>/queries.ts  TanStack Query hooks
 │   ├── <feature>/components/ Feature-local screens and components
-│   └── <feature>/index.ts    Public surface of the feature
+│   ├── <feature>/index.ts    Public surface of the feature
+│   ├── auth/auth-service.ts  Identity seam · auth-provider.tsx (useAuth)
+│   ├── auth/guards.tsx       RequireAuth · RequireRole · RequireOnboarding
+│   └── auth/model.ts         destinationForUser, safeNext — the routing rules
 │       admin · analytics · auth · bookings · discover · earnings
 │       employer-dashboard · employer-settings · employers · events
 │       job-posting · marketing · notifications · onboarding · payments
@@ -227,6 +277,7 @@ src/
 │
 └── types/
     ├── domain.ts             Shift, Booking, Worker, Employer, Invoice, Payout…
+    ├── auth.ts               AuthUser, SignUpInput, onboarding inputs
     └── events.ts             Event, EventStatus, EventCategory, Destination…
 ```
 
@@ -239,11 +290,12 @@ src/
 This is a front-end prototype built to demonstrate the product, not a deployable system.
 
 - **No backend.** No server, database or API. Everything runs in the browser against `src/lib/mock/store.ts`.
-- **No real authentication or authorisation.** `/login` picks a persona; there are no passwords, sessions or access control. Any `/employer/*`, `/worker/*` or `/admin/*` route can be opened directly — **the admin console is not protected**, it is a UI demonstration of the operations surface, not a gated one — and the persona lives in `localStorage`.
+- **Authentication is real in shape, not in substance.** There are accounts, passwords, roles and route guards, and they behave consistently — a signed-out deep link lands on `/login?next=…`, `/admin/*` turns away every non-admin, and unfinished verification or onboarding outranks any `?next=`. But it is all client-side: the session is a `localStorage` record, passwords are checked by the mock store, and the guards run after hydration in the browser. **None of it is a security boundary** — anyone can edit `localStorage` and reach any screen. Real enforcement needs a server, which this prototype does not have.
+- **Third-party sign-in is simulated.** The Google and Apple buttons open a plain account chooser that asks for nothing — no password, no PIN, no recovery question — and says on its face that it is a prototype simulation. No provider is ever contacted and no third-party credential is ever collected.
 - **Data is per-browser and resets daily.** State is stored in `localStorage` and re-seeds on the first visit of each new day, so bookings you create will disappear. Nothing is shared between browsers, devices or users — two people using the demo do not see each other's changes. Private browsing falls back to in-memory only.
 - **Payments are simulated.** Mobile money payouts, invoice generation and the 18% service fee are calculated and animated, but no money moves and no payment provider is integrated.
 - **QR check-in is simulated.** The QR code is generated and the check-in flow is complete, but there is no camera scanning or geofence verification — the shift detail page advances the booking state directly.
-- **Notifications, email and SMS are display-only.** The notification centres read from the mock store; nothing is ever sent.
+- **Notifications, email and SMS are display-only.** The notification centres read from the mock store; nothing is ever sent. The two screens that would otherwise depend on an email say so on the page: `/verify-email` accepts any six digits, and the "check your email" panel after a reset request offers `/reset-password?token=demo` instead of mailing a link.
 - **Verifications are seeded, not performed.** Identity, phone, photo, reference and skill badges come from the seed data; no document upload or identity check happens.
 - **Search, ranking and analytics run on the seed set.** Candidate matching (`useShiftCandidates`) is a real scoring function, but over 24 mock workers — it is illustrative, not tuned.
 - **Content is fictional.** All businesses, professionals, venues, ratings and figures are invented for the demo.

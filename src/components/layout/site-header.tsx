@@ -8,7 +8,7 @@ import { Logo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger, SheetContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { SiteAccountMenu } from "./site-account-menu";
+import { SiteAccountMenu, SiteAccountMobileActions } from "./site-account-menu";
 
 const NAV = [
   { href: "/events", label: "Events" },
@@ -71,9 +71,7 @@ export function SiteHeader() {
               ))}
             </nav>
             <div className="mt-2 flex flex-col gap-2 border-t border-border p-4">
-              <Button size="lg" asChild><Link href="/events">Browse events</Link></Button>
-              <Button size="lg" variant="outline" asChild><Link href="/login?as=employer">Post a shift</Link></Button>
-              <Button variant="ghost" asChild><Link href="/login">Log in</Link></Button>
+              <SiteAccountMobileActions />
             </div>
           </SheetContent>
         </Dialog>

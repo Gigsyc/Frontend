@@ -18,6 +18,7 @@ import { EventResults } from "./event-results";
 import { EventsSearch } from "./events-search";
 import { FeaturedRail } from "./featured-rail";
 import { FilterBar } from "./filter-bar";
+import { PersonalisedRows } from "./personalised-rows";
 
 /**
  * Unfiltered baseline: the featured rail, the place grid and the header line all read from this
@@ -137,6 +138,11 @@ export function EventsScreen() {
             {!filtersOn ? (
               <FeaturedRail events={featured} organizerName={organizerName} isSaved={isSaved} onToggleSave={toggleSave} />
             ) : null}
+
+            {/* Self-guarding: renders nothing unless a signed-in customer has finished onboarding
+                and picked a place and interests. Hidden once the board is filtered, because then
+                the customer has said what they want more recently than their profile has. */}
+            {!filtersOn ? <PersonalisedRows /> : null}
 
             <div className="space-y-3">
               <DateRail value={state.when} onChange={(when) => update({ when })} counts={countBase.data ? counts : undefined} />

@@ -1,16 +1,25 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { Persona } from "@/types";
-import { DEMO_ADMIN_ID, DEMO_CUSTOMER_ID, DEMO_EMPLOYER_ID, DEMO_EMPLOYER_USER_ID, DEMO_WORKER_ID } from "@/data/mocks/seed";
-
-const KEY = "gigsyc.prototype.session";
-
 /**
- * The four ways into the prototype. "organizer" is the same persona as "employer" —
- * partners who run events are the same organisations that hire staff — but the login
- * presents it in the language a partner would recognise.
+ * Session compatibility layer.
+ *
+ * The workforce product was built on `Persona`. Identity now lives in
+ * `features/auth`, so these hooks derive from the signed-in user rather than
+ * holding their own state. Nothing here stores anything.
+ *
+ * New code should use `useAuth()` directly.
  */
+import { useMemo } from "react";
+import type { Persona } from "@/types";
+import { AuthProvider, useAuth } from "@/features/auth/auth-provider";
+import { DEMO_ACCOUNT_IDS } from "@/data/mocks/accounts";
+import { DEMO_ADMIN_ID, DEMO_CUSTOMER_ID, DEMO_EMPLOYER_ID, DEMO_EMPLOYER_USER_ID, DEMO_WORKER_ID } from "@/data/mocks/seed";
+import { ROLE_HOME } from "@/data/auth";
+
+/** @deprecated Use <AuthProvider>. Kept so existing imports keep compiling. */
+export const SessionProvider = AuthProvider;
+
+/** Personas for the four demo accounts, used by the login page. */
 export const DEMO_PERSONAS = {
   customer: { role: "customer", userId: DEMO_CUSTOMER_ID },
   organizer: { role: "employer", userId: DEMO_EMPLOYER_USER_ID, employerId: DEMO_EMPLOYER_ID },
@@ -19,106 +28,61 @@ export const DEMO_PERSONAS = {
   admin: { role: "admin", userId: DEMO_ADMIN_ID },
 } satisfies Record<string, Persona>;
 
-/** Where each role lands after signing in. */
+export { DEMO_ACCOUNT_IDS };
+
+/** Where each persona role lands. Roles map onto ROLE_HOME, with partner == employer. */
 export const HOME_FOR_ROLE: Record<Persona["role"], string> = {
-  customer: "/events",
+  customer: ROLE_HOME.customer,
   employer: "/employer",
-  worker: "/worker",
-  admin: "/admin",
+  worker: ROLE_HOME.worker,
+  admin: ROLE_HOME.admin,
 };
 
-interface SessionContextValue {
-  persona: Persona | null;
-  /** True until localStorage has been read on the client. */
-  ready: boolean;
-  signIn: (persona: Persona) => void;
-  signOut: () => void;
-}
-
-/**
- * Tiny external store for the persisted persona. Reading localStorage through
- * useSyncExternalStore keeps server and first client render identical (persona null,
- * ready false) and avoids setting state inside an effect.
- */
-interface SessionSnapshot { persona: Persona | null; ready: boolean }
-const SERVER_SNAPSHOT: SessionSnapshot = { persona: null, ready: false };
-let snapshot: SessionSnapshot | null = null;
-const listeners = new Set<() => void>();
-
-function readSnapshot(): SessionSnapshot {
-  if (!snapshot) {
-    let persona: Persona | null = null;
-    try {
-      const raw = window.localStorage.getItem(KEY);
-      if (raw) persona = JSON.parse(raw) as Persona;
-    } catch { /* ignore */ }
-    snapshot = { persona, ready: true };
-  }
-  return snapshot;
-}
-
-function writePersona(persona: Persona | null) {
-  snapshot = { persona, ready: true };
-  try {
-    if (persona) window.localStorage.setItem(KEY, JSON.stringify(persona));
-    else window.localStorage.removeItem(KEY);
-  } catch { /* ignore */ }
-  listeners.forEach((l) => l());
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
-
-const SessionContext = createContext<SessionContextValue | null>(null);
-
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const { persona, ready } = useSyncExternalStore(subscribe, readSnapshot, () => SERVER_SNAPSHOT);
-
-  const signIn = useCallback((p: Persona) => writePersona(p), []);
-  const signOut = useCallback(() => writePersona(null), []);
-
-  const value = useMemo(() => ({ persona, ready, signIn, signOut }), [persona, ready, signIn, signOut]);
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
-}
-
 export function useSession() {
-  const ctx = useContext(SessionContext);
-  if (!ctx) throw new Error("useSession must be used inside <SessionProvider>");
-  return ctx;
+  const { persona, ready, user, logout, setUser } = useAuth();
+  return useMemo(() => ({
+    persona,
+    ready,
+    user,
+    signIn: (_p: Persona) => {
+      // Personas are derived from the account now; signing in goes through useAuth().
+      void _p;
+    },
+    signOut: logout,
+    setUser,
+  }), [persona, ready, user, logout, setUser]);
 }
 
-/**
- * Convenience for app shells: returns the active persona for a role, falling back to the demo
- * persona so deep links work in the prototype even without visiting /login.
- */
 type EmployerPersona = Extract<Persona, { role: "employer" }>;
 type WorkerPersona = Extract<Persona, { role: "worker" }>;
-
-export function useEmployerSession() {
-  const { persona, ...rest } = useSession();
-  const p: EmployerPersona = persona?.role === "employer" ? persona : (DEMO_PERSONAS.employer as EmployerPersona);
-  return { ...rest, persona: p, employerId: p.employerId };
-}
-
-export function useWorkerSession() {
-  const { persona, ...rest } = useSession();
-  const p: WorkerPersona = persona?.role === "worker" ? persona : (DEMO_PERSONAS.worker as WorkerPersona);
-  return { ...rest, persona: p, workerId: p.userId };
-}
-
 type CustomerPersona = Extract<Persona, { role: "customer" }>;
 type AdminPersona = Extract<Persona, { role: "admin" }>;
 
+/**
+ * Each of these falls back to the matching demo persona so a deep link into the
+ * employer portal or worker app still renders for someone who has not signed in —
+ * the prototype stays explorable without a login wall on every page.
+ */
+export function useEmployerSession() {
+  const { persona, ready, logout } = useAuth();
+  const p: EmployerPersona = persona?.role === "employer" ? persona : (DEMO_PERSONAS.employer as EmployerPersona);
+  return { persona: p, ready, employerId: p.employerId, signOut: logout };
+}
+
+export function useWorkerSession() {
+  const { persona, ready, logout } = useAuth();
+  const p: WorkerPersona = persona?.role === "worker" ? persona : (DEMO_PERSONAS.worker as WorkerPersona);
+  return { persona: p, ready, workerId: p.userId, signOut: logout };
+}
+
 export function useCustomerSession() {
-  const { persona, ...rest } = useSession();
+  const { persona, ready, logout } = useAuth();
   const p: CustomerPersona = persona?.role === "customer" ? persona : (DEMO_PERSONAS.customer as CustomerPersona);
-  return { ...rest, persona: p, userId: p.userId, signedIn: persona?.role === "customer" };
+  return { persona: p, ready, userId: p.userId, signedIn: persona?.role === "customer", signOut: logout };
 }
 
 export function useAdminSession() {
-  const { persona, ...rest } = useSession();
+  const { persona, ready, logout } = useAuth();
   const p: AdminPersona = persona?.role === "admin" ? persona : (DEMO_PERSONAS.admin as AdminPersona);
-  return { ...rest, persona: p, userId: p.userId };
+  return { persona: p, ready, userId: p.userId, signOut: logout };
 }

@@ -1,5 +1,5 @@
 import type {
-  AppNotification, Booking, Destination, Event, Invoice, Payout, PlatformUser, Report, SavedEvent,
+  AppNotification, AuthUser, Booking, Destination, Event, Invoice, Payout, PlatformUser, Report, SavedEvent,
   Shift, SystemService, TalentPoolEntry, Worker, WorkHistoryItem,
 } from "@/types";
 import { SERVICE_FEE_RATE } from "../roles";
@@ -9,6 +9,7 @@ import { SHIFTS } from "./shifts";
 import { ALINE_HISTORY, WORKERS } from "./workers";
 import { EVENTS } from "./events";
 import { DESTINATIONS, PLATFORM_USERS, REPORTS, SYSTEM_SERVICES, DEMO_CUSTOMER_ID } from "./platform";
+import { ACCOUNTS } from "./accounts";
 
 export interface SeedState {
   employers: typeof EMPLOYERS;
@@ -25,6 +26,7 @@ export interface SeedState {
   reports: Report[];
   systemServices: SystemService[];
   savedEvents: SavedEvent[];
+  accounts: AuthUser[];
 }
 
 export const DEMO_WORKER_ID = "wk_aline";
@@ -244,6 +246,7 @@ export function buildSeed(): SeedState {
     payouts: buildPayouts(bookings),
     invoices: buildInvoices(bookings),
     notifications: buildNotifications(),
+    accounts: ACCOUNTS,
     events: EVENTS,
     destinations: DESTINATIONS,
     platformUsers: PLATFORM_USERS,

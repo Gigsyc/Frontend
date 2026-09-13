@@ -1,90 +1,143 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Bookmark, Briefcase, LayoutDashboard, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import {
+  Bookmark, CalendarCheck, LayoutDashboard, LogOut, Settings, ShieldCheck, UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { HOME_FOR_ROLE, useSession } from "@/features/session";
-import { PLATFORM_USERS } from "@/data/mocks/platform";
-import { EMPLOYER_USERS } from "@/data/mocks/employers";
-import { WORKERS } from "@/data/mocks/workers";
+import { useSignOut } from "@/features/account/use-sign-out";
+import { useAuth } from "@/features/auth";
+import type { UserRole } from "@/types";
 
-const ROLE_LABEL = {
-  customer: "Explorer",
-  employer: "Partner",
-  worker: "Professional",
-  admin: "Platform admin",
-} as const;
+interface MenuLink {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
 
-const ROLE_ICON = {
-  customer: UserRound,
-  employer: Briefcase,
-  worker: UserRound,
-  admin: ShieldCheck,
-} as const;
+const PROFILE: MenuLink = { href: "/account", label: "Profile", icon: UserRound };
+const SETTINGS: MenuLink = { href: "/account?tab=settings", label: "Account settings", icon: Settings };
 
-/** Resolves the display name for whichever persona is signed in. */
-function useAccount() {
-  const { persona } = useSession();
-  if (!persona) return null;
-  if (persona.role === "worker") {
-    const w = WORKERS.find((x) => x.id === persona.userId);
-    return w ? { name: `${w.firstName} ${w.lastName}`, color: w.avatarColor, role: persona.role } : null;
-  }
-  if (persona.role === "employer") {
-    const u = EMPLOYER_USERS.find((x) => x.id === persona.userId);
-    return u ? { name: u.name, color: "#001b56", role: persona.role } : null;
-  }
-  const u = PLATFORM_USERS.find((x) => x.id === persona.userId);
-  return u ? { name: u.name, color: u.avatarColor, role: persona.role } : null;
+/**
+ * Each role's menu leads with the thing that role came for: a customer with their own
+ * profile, everyone else with the workspace they work in.
+ */
+const LINKS: Record<UserRole, MenuLink[]> = {
+  customer: [
+    PROFILE,
+    { href: "/events?view=saved", label: "Saved", icon: Bookmark },
+    SETTINGS,
+  ],
+  partner: [
+    { href: "/partner", label: "Partner dashboard", icon: LayoutDashboard },
+    PROFILE,
+    SETTINGS,
+  ],
+  worker: [
+    { href: "/worker", label: "My shifts", icon: CalendarCheck },
+    PROFILE,
+  ],
+  admin: [
+    { href: "/admin", label: "Admin console", icon: ShieldCheck },
+    PROFILE,
+  ],
+};
+
+/** One signed-out offer, in one order: Log in then Sign up, ghost then primary. */
+function SignedOut({ size }: { size?: "lg" }) {
+  return (
+    <>
+      <Button variant="ghost" size={size} asChild><Link href="/login">Log in</Link></Button>
+      <Button size={size} asChild><Link href="/signup">Sign up</Link></Button>
+    </>
+  );
 }
 
 /** Right-hand side of the public header: sign-in buttons, or the account menu once signed in. */
 export function SiteAccountMenu() {
-  const router = useRouter();
-  const { persona, ready, signOut } = useSession();
-  const account = useAccount();
+  const { user, ready } = useAuth();
+  const signOut = useSignOut();
 
-  // Render the signed-out state during hydration so the header never flickers between states.
-  if (!ready || !persona || !account) {
-    return (
-      <>
-        <Button variant="ghost" asChild><Link href="/login">Log in</Link></Button>
-        <Button asChild><Link href="/events">Browse events</Link></Button>
-      </>
-    );
-  }
-
-  const Icon = ROLE_ICON[account.role];
-  const home = HOME_FOR_ROLE[account.role];
+  // Render the signed-out state until localStorage has been read, so the header never
+  // flickers between two states on a reload.
+  if (!ready || !user) return <SignedOut />;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="flex h-10 items-center gap-2 rounded-full pl-1 pr-2.5 transition-colors hover:bg-ink-100" aria-label="Account menu">
-          <Avatar name={account.name} color={account.color} size="sm" />
-          <span className="hidden text-sm font-medium text-fg sm:block">{account.name.split(" ")[0]}</span>
+        <button
+          type="button"
+          className="flex h-11 items-center gap-2 rounded-full pl-1 pr-2.5 transition-colors hover:bg-ink-100 focus-visible:outline-none focus-visible:shadow-focus"
+          // The visible label is the first name, so the accessible name opens with it and only
+          // then says what the button does — voice control can still say what it reads.
+          aria-label={`${user.name.split(" ")[0]} — account menu`}
+        >
+          <Avatar name={user.name} color={user.avatarColor} size="sm" />
+          <span className="hidden text-sm font-medium text-fg sm:block">{user.name.split(" ")[0]}</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="text-sm font-semibold text-fg">{account.name}</span>
-          <span className="font-normal">{ROLE_LABEL[account.role]}</span>
+          <span className="truncate text-sm font-semibold text-fg">{user.name}</span>
+          <span className="truncate font-normal">{user.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {account.role === "customer" ? (
-          <DropdownMenuItem asChild><Link href="/events?view=saved"><Bookmark /> Saved events</Link></DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem asChild><Link href={home}><LayoutDashboard /> {account.role === "admin" ? "Admin console" : "Dashboard"}</Link></DropdownMenuItem>
-        )}
-        <DropdownMenuItem asChild><Link href="/events"><Icon /> Browse events</Link></DropdownMenuItem>
+        {LINKS[user.role].map(({ href, label, icon: Icon }) => (
+          <DropdownMenuItem key={label} asChild>
+            <Link href={href}><Icon /> {label}</Link>
+          </DropdownMenuItem>
+        ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => { signOut(); router.push("/login"); }}><LogOut /> Log out</DropdownMenuItem>
+        <DropdownMenuItem onSelect={signOut}><LogOut /> Log out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * The same account for the mobile sheet, where a dropdown inside a sheet has nowhere to
+ * go. The rows render inline instead, but they read the one `LINKS` map above, so the
+ * two menus cannot drift. The sheet closes itself on navigation, so no handler is needed.
+ */
+export function SiteAccountMobileActions() {
+  const { user, ready } = useAuth();
+  const signOut = useSignOut();
+
+  // Same rule as the desktop menu: show the signed-out actions until the session has
+  // been read, rather than flickering from one state to the other on reload.
+  if (!ready || !user) return <SignedOut size="lg" />;
+
+  return (
+    <>
+      <div className="flex items-center gap-3 pb-1">
+        <Avatar name={user.name} color={user.avatarColor} size="sm" />
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-fg">{user.name}</span>
+          <span className="block truncate text-[13px] text-fg-muted">{user.email}</span>
+        </span>
+      </div>
+      {LINKS[user.role].map(({ href, label, icon: Icon }) => (
+        <Link
+          key={label}
+          href={href}
+          className="flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm font-medium text-fg hover:bg-ink-50"
+        >
+          <Icon className="size-[18px] text-fg-muted" aria-hidden /> {label}
+        </Link>
+      ))}
+      <button
+        type="button"
+        onClick={signOut}
+        className="flex min-h-11 items-center gap-2.5 rounded-md px-3 text-left text-sm font-medium text-fg hover:bg-ink-50 focus-visible:outline-none focus-visible:shadow-focus"
+      >
+        <LogOut className="size-[18px] text-fg-muted" aria-hidden /> Log out
+      </button>
+    </>
   );
 }

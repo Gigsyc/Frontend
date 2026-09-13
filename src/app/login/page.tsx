@@ -6,11 +6,14 @@ export const metadata: Metadata = {
   description: "Sign in to GigSyc to discover events, manage your team or run the platform.",
 };
 
+const first = (value: string | string[] | undefined) => (typeof value === "string" ? value : undefined);
+
 /**
- * `?as=` is read here rather than through `useSearchParams` so the whole split screen —
- * photograph, heading, form — renders on the server instead of behind a blank boundary.
+ * `?as=` and `?next=` are read here rather than through `useSearchParams` so the whole
+ * split screen — photograph, heading, form — renders on the server instead of behind a
+ * blank boundary.
  */
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  const { as } = await searchParams;
-  return <LoginScreen hint={typeof as === "string" ? as : undefined} />;
+  const { as, next } = await searchParams;
+  return <LoginScreen hint={first(as)} next={first(next)} />;
 }

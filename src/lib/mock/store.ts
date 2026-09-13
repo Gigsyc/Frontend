@@ -8,15 +8,17 @@
  */
 import { formatISO, isAfter, isBefore, isSameDay, parseISO, startOfWeek, endOfWeek, addDays } from "date-fns";
 import type {
-  AdminEventFilters, AppNotification, Booking, BookingStatus, Destination, Employer, Event, EventFilters,
-  EventStatus, Invoice, Payout, PlatformUser, Report, Shift, ShiftFilters, SystemService, TalentPoolEntry,
-  Worker, WorkerFilters,
+  AdminEventFilters, AppNotification, AuthUser, Booking, BookingStatus, CustomerOnboardingInput, Destination,
+  Employer, Event, EventFilters, EventStatus, Invoice, Payout, PartnerOnboardingInput, PlatformUser, Report,
+  Shift, ShiftFilters, SignUpInput, SystemService, TalentPoolEntry, Worker, WorkerFilters,
 } from "@/types";
+import { AuthError } from "@/types";
+import { MIN_PASSWORD_LENGTH } from "@/data/auth";
 import { buildSeed, type SeedState, DEMO_EMPLOYER_ID, DEMO_WORKER_ID } from "@/data/mocks/seed";
 import { eventMatchesWhen, isPubliclyReachable } from "@/data/events";
 import { ROLES } from "@/data/roles";
 
-const STORAGE_KEY = "gigsyc.prototype.state.v5";
+const STORAGE_KEY = "gigsyc.prototype.state.v7";
 const SEED_DAY_KEY = "gigsyc.prototype.seedDay";
 
 export class MockApiError extends Error {
@@ -30,8 +32,17 @@ const clone = <T>(v: T): T => (typeof structuredClone === "function" ? structure
 const nowIso = () => formatISO(new Date());
 const today = () => new Date().toISOString().slice(0, 10);
 
-let idSeq = 1000;
-const nextId = (prefix: string) => `${prefix}_${(idSeq++).toString(36)}`;
+/**
+ * Ids must not collide with records already persisted by an earlier session.
+ *
+ * A plain counter restarts at the same number on every page load, so the first record
+ * created after a reload reuses the id of the first record created before it — and a
+ * lookup then returns the wrong row entirely. Mixing in a per-session token keeps ids
+ * unique across reloads without needing a persisted counter.
+ */
+const ID_SESSION = Math.random().toString(36).slice(2, 6);
+let idSeq = 0;
+const nextId = (prefix: string) => `${prefix}_${ID_SESSION}${(idSeq++).toString(36)}`;
 
 class MockStore {
   private state: SeedState;
@@ -715,6 +726,216 @@ class MockStore {
   async listSystemServices(): Promise<SystemService[]> {
     await this.simulate();
     return clone(this.state.systemServices);
+  }
+
+
+  // ————————————————————————————————————————————————————————— accounts & auth
+
+  private findAccount(email: string) {
+    const e = email.trim().toLowerCase();
+    return this.state.accounts.find((a) => a.email.toLowerCase() === e);
+  }
+
+  async getAccount(id: string): Promise<AuthUser> {
+    await this.simulate();
+    const a = this.state.accounts.find((x) => x.id === id);
+    if (!a) throw new AuthError("That account no longer exists.", "not_found");
+    return clone(a);
+  }
+
+  /**
+   * Mock sign-in. Any password of the minimum length is accepted for a known
+   * address — there are no stored credentials and none are ever checked.
+   */
+  async signIn(email: string, password: string): Promise<AuthUser> {
+    await this.simulate();
+    const account = this.findAccount(email);
+    if (!account) throw new AuthError("We don't recognise that email address.", "invalid_credentials");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      throw new AuthError("That password doesn't match this account.", "invalid_credentials");
+    }
+    return clone(account);
+  }
+
+  async signUp(input: SignUpInput): Promise<AuthUser> {
+    await this.simulate();
+    if (this.findAccount(input.email)) {
+      throw new AuthError("An account already uses that email. Try signing in instead.", "email_taken");
+    }
+    if (input.password.length < MIN_PASSWORD_LENGTH) {
+      throw new AuthError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`, "weak_password");
+    }
+    return clone(this.createAccount({ name: input.name, email: input.email, role: input.role ?? "customer", signInMethod: "email", emailVerified: false }));
+  }
+
+  /**
+   * Simulated federated sign-in for Google and Apple. No credentials are involved:
+   * the chooser hands back an identity, and we either return the existing account or
+   * create a verified one. Swap this for a real OAuth code exchange and nothing above
+   * it changes — the shape a provider returns is already what this takes.
+   */
+  async signInWithProvider(input: {
+    provider: "google" | "apple";
+    name: string;
+    email: string;
+    role?: AuthUser["role"];
+  }): Promise<AuthUser> {
+    await this.simulate();
+    const existing = this.findAccount(input.email);
+    if (existing) return clone(existing);
+    // A federated address is already proven, so these accounts skip email verification.
+    return clone(this.createAccount({
+      name: input.name,
+      email: input.email,
+      role: input.role ?? "customer",
+      signInMethod: input.provider,
+      emailVerified: true,
+    }));
+  }
+
+  /** @deprecated Use signInWithProvider. */
+  async signInWithGoogle(input: { name: string; email: string; role?: AuthUser["role"] }): Promise<AuthUser> {
+    return this.signInWithProvider({ provider: "google", ...input });
+  }
+
+  private createAccount(input: { name: string; email: string; role: AuthUser["role"]; signInMethod: AuthUser["signInMethod"]; emailVerified: boolean }): AuthUser {
+    const palette = ["#001b56", "#17336b", "#0096b5", "#b88200", "#116a3e", "#932a1f", "#7a1fa2"];
+    const colour = palette[this.state.accounts.length % palette.length];
+    const platformUserId = nextId("pu");
+    const account: AuthUser = {
+      id: nextId("ac"),
+      name: input.name.trim(),
+      email: input.email.trim().toLowerCase(),
+      role: input.role,
+      avatarColor: colour,
+      emailVerified: input.emailVerified,
+      onboardingCompleted: false,
+      signInMethod: input.signInMethod,
+      createdAt: nowIso(),
+      interests: [],
+      platformUserId,
+    };
+    this.state.accounts.push(account);
+    // A new sign-up is a real person on the platform, so it shows up in the admin console too.
+    this.state.platformUsers.unshift({
+      id: platformUserId,
+      name: account.name,
+      email: account.email,
+      role: account.role === "partner" ? "organizer" : account.role === "worker" ? "professional" : account.role,
+      status: input.emailVerified ? "active" : "pending",
+      joinedAt: today(),
+      lastActiveAt: nowIso(),
+      place: "Kigali",
+      avatarColor: colour,
+      eventsAttended: 0,
+    });
+    this.persist();
+    return account;
+  }
+
+  async updateAccount(id: string, patch: Partial<AuthUser>): Promise<AuthUser> {
+    await this.simulate();
+    const a = this.state.accounts.find((x) => x.id === id);
+    if (!a) throw new AuthError("That account no longer exists.", "not_found");
+    Object.assign(a, patch);
+    const pu = this.state.platformUsers.find((u) => u.id === a.platformUserId);
+    if (pu) {
+      pu.name = a.name;
+      pu.email = a.email;
+      if (a.location) pu.place = a.location;
+      if (a.emailVerified && pu.status === "pending") pu.status = "active";
+      pu.lastActiveAt = nowIso();
+    }
+    this.persist();
+    return clone(a);
+  }
+
+  /** Accepts any six digits — there is no real code to check. */
+  async verifyEmail(id: string, code: string): Promise<AuthUser> {
+    await this.simulate();
+    if (!/^\d{6}$/.test(code.trim())) throw new AuthError("Enter the six-digit code from your email.", "invalid_credentials");
+    return this.updateAccount(id, { emailVerified: true });
+  }
+
+  async completeCustomerOnboarding(id: string, input: CustomerOnboardingInput): Promise<AuthUser> {
+    return this.updateAccount(id, {
+      location: input.location,
+      interests: input.interests,
+      discoveryPreference: input.discoveryPreference,
+      onboardingCompleted: true,
+    });
+  }
+
+  /**
+   * Finishing partner onboarding creates the Employer record the workforce product
+   * already understands, so a new partner lands in a working workspace.
+   */
+  async completePartnerOnboarding(id: string, input: PartnerOnboardingInput): Promise<AuthUser> {
+    await this.simulate();
+    const account = this.state.accounts.find((x) => x.id === id);
+    if (!account) throw new AuthError("That account no longer exists.", "not_found");
+
+    const employerId = account.employerId ?? nextId("emp");
+    if (!account.employerId) {
+      this.state.employers.push({
+        id: employerId,
+        name: input.organizationName,
+        slug: input.organizationName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+        sector: input.organizationType === "hotel" || input.organizationType === "restaurant" ? "hospitality" : "events",
+        tagline: `${input.organizationName} on GigSyc.`,
+        about: "This partner joined through the GigSyc prototype and has not added a description yet.",
+        district: "Kimihurura",
+        verified: false,
+        memberSince: today(),
+        markColor: account.avatarColor,
+        contact: { name: input.contactName, role: "Primary contact", email: account.email, phone: input.phone },
+        stats: { shiftsPosted: 0, workersEngaged: 0, avgRatingGiven: 0, fillRate: 0 },
+      });
+    }
+
+    account.role = "partner";
+    account.employerId = employerId;
+    account.location = input.place;
+    account.onboardingCompleted = true;
+    account.organization = {
+      name: input.organizationName,
+      type: input.organizationType,
+      contactName: input.contactName,
+      phone: input.phone,
+      place: input.place,
+      verified: false,
+    };
+    const pu = this.state.platformUsers.find((u) => u.id === account.platformUserId);
+    if (pu) { pu.role = "organizer"; pu.linkedEmployerId = employerId; pu.place = input.place; }
+    this.persist();
+    return clone(account);
+  }
+
+  /** Password reset is simulated end to end; nothing is stored or sent. */
+  async requestPasswordReset(email: string): Promise<{ sent: boolean }> {
+    await this.simulate();
+    // Always reports success, and deliberately never reads the address, so the
+    // response cannot disclose which addresses exist. The parameter stays in the
+    // signature because the real endpoint will need it.
+    void email;
+    return { sent: true };
+  }
+
+  /**
+   * Re-sends the six-digit verification code. Nothing is generated or delivered —
+   * `verifyEmail` accepts any six digits — but this is its own seam so the UI is not
+   * calling the password-reset endpoint to do it.
+   */
+  async resendVerification(email: string): Promise<{ sent: boolean }> {
+    await this.simulate();
+    void email;
+    return { sent: true };
+  }
+
+  async resetPassword(password: string): Promise<{ ok: boolean }> {
+    await this.simulate();
+    if (password.length < MIN_PASSWORD_LENGTH) throw new AuthError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`, "weak_password");
+    return { ok: true };
   }
 
   // ————————————————————————————————————————————————————————— helpers

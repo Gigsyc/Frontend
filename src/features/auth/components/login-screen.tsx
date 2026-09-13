@@ -1,13 +1,18 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { Logo } from "@/components/brand";
-import { accountForEmail, accountForHint, FALLBACK_ACCOUNT, type DemoAccount } from "../accounts";
+import { toast } from "sonner";
+import { AUTH_PANELS, AuthHeading, AuthLayout } from "@/components/layout/auth-layout";
+import { AppleButton, AuthDivider, GoogleButton } from "@/components/ui/social-auth";
+import { accountForEmail, accountForHint, type DemoAccount } from "../accounts";
+import { useAuth } from "../auth-provider";
+import { RedirectIfAuthenticated } from "../guards";
+import { safeNext } from "../model";
 import { useSignIn } from "../use-sign-in";
 import { DemoAccountList } from "./demo-account-list";
-import { LoginAside } from "./login-aside";
+import { GoogleSignInDialog, useGoogleSignIn } from "./google";
+import { AppleSignInDialog, useAppleSignIn } from "./apple";
 import { LoginForm } from "./login-form";
 
 /** Names the account list for screen readers with the same words the divider shows. */
@@ -16,20 +21,46 @@ const CONTINUE_AS_ID = "login-continue-as";
 interface LoginScreenProps {
   /** `?as=` from the marketing call to action — "worker", "employer", "organizer", "admin". */
   hint?: string;
+  /** `?next=` set by `RequireAuth` when a protected page bounced the visitor here. */
+  next?: string;
 }
 
-/** /login — photograph on the left, one form on the right, no site chrome. */
-export function LoginScreen({ hint }: LoginScreenProps) {
+/**
+ * /login — photograph on the left, one form on the right, no site chrome.
+ *
+ * Every way in — credentials, Google, a demo row — ends by writing the session and
+ * nothing else. The guard below is the single navigator: it is handed `?next=` and
+ * decides whether to follow it, so two routes can never race each other.
+ */
+export function LoginScreen({ hint, next }: LoginScreenProps) {
+  const target = safeNext(next);
+  return (
+    <RedirectIfAuthenticated to={target}>
+      <SignIn hint={hint} next={target} />
+    </RedirectIfAuthenticated>
+  );
+}
+
+function SignIn({ hint, next }: LoginScreenProps) {
+  const { login } = useAuth();
   const hinted = accountForHint(hint);
   const [picked, setPicked] = useState<DemoAccount | null>(null);
   /** Arriving from "Find shifts" or "Post a shift" fills in the person that button meant. */
   const [email, setEmail] = useState(() => hinted?.email ?? "");
+  const [formPending, setFormPending] = useState(false);
   const { enter, pendingId, busy } = useSignIn();
+  const google = useGoogleSignIn({ next });
+  const apple = useAppleSignIn({ next });
 
   const typed = accountForEmail(email);
-  /** What "Sign in" will do: a matching email first, then the surface the visitor came from. */
-  const formAccount = typed ?? hinted ?? FALLBACK_ACCOUNT;
   const selectedId = picked?.id ?? typed?.id ?? hinted?.id ?? null;
+  const googleBusy = google.pendingEmail !== null;
+  const appleBusy = apple.pendingEmail !== null;
+  /** Everything the form is not: what should hold the form still. */
+  const elsewhereBusy = busy || googleBusy;
+  /** Any sign-in at all. One person, one session — a second attempt must not start. */
+  const anyBusy = elsewhereBusy || formPending;
+  const signUpHref = next ? `/signup?next=${encodeURIComponent(next)}` : "/signup";
 
   const choose = (account: DemoAccount) => {
     setPicked(account);
@@ -37,70 +68,67 @@ export function LoginScreen({ hint }: LoginScreenProps) {
     enter(account, account.id);
   };
 
-  const submit = () => {
-    setPicked(formAccount);
-    enter(formAccount, "form");
+  /** Credentials go to the service. An address it does not know now fails, as it should. */
+  const signIn = async (address: string, password: string, remember: boolean) => {
+    const user = await login(address, password, remember);
+    toast.success("Signed in", { description: `Welcome back, ${user.name.split(" ")[0]}.` });
   };
 
   return (
-    <div className="flex min-h-dvh bg-canvas">
-      <LoginAside />
+    <AuthLayout panel={AUTH_PANELS.signIn}>
+      <AuthHeading
+        title="Welcome back"
+        description="Sign in to discover events, manage your team or run the platform."
+      />
 
-      <main id="main" className="flex min-h-dvh w-full flex-col px-5 pb-8 pt-6 sm:px-8 lg:w-[48%] lg:px-12 lg:pb-10">
-        <div className="mx-auto flex w-full max-w-[400px] items-center justify-between gap-4">
-          <Link href="/" aria-label="GigSyc home" className="rounded-sm lg:hidden">
-            <Logo size="md" />
-          </Link>
-          <Link
-            href="/"
-            className="inline-flex h-11 items-center gap-1.5 text-[13px] font-medium text-fg-muted transition-colors hover:text-fg"
-          >
-            <ArrowLeft className="size-4" aria-hidden /> Back to the website
-          </Link>
-        </div>
+      <div className="flex flex-col gap-2.5">
+        <GoogleButton onClick={() => google.setOpen(true)} loading={googleBusy} disabled={anyBusy} />
+        <AppleButton onClick={() => apple.setOpen(true)} loading={appleBusy} disabled={anyBusy} />
+      </div>
+      <GoogleSignInDialog
+        open={google.open}
+        onOpenChange={google.setOpen}
+        pendingEmail={google.pendingEmail}
+        onChoose={google.choose}
+      />
+      <AppleSignInDialog
+        open={apple.open}
+        onOpenChange={apple.setOpen}
+        pendingEmail={apple.pendingEmail}
+        onChoose={apple.choose}
+      />
 
-        <div className="flex flex-1 flex-col justify-center py-8">
-          <div className="mx-auto w-full max-w-[400px]">
-            <h1 className="text-[28px] font-semibold leading-9 sm:text-[30px] sm:leading-10">Welcome back</h1>
-            <p className="mt-2 text-sm leading-6 text-fg-muted">
-              Sign in to discover events, manage your team or run the platform.
-            </p>
+      <AuthDivider className="my-6" />
 
-            <LoginForm
-              className="mt-8"
-              email={email}
-              onEmail={setEmail}
-              onSubmit={submit}
-              pending={pendingId === "form"}
-              disabled={busy && pendingId !== "form"}
-            />
+      <LoginForm
+        email={email}
+        onEmail={setEmail}
+        onSubmit={signIn}
+        disabled={elsewhereBusy}
+        onPendingChange={setFormPending}
+      />
 
-            <div className="mt-8 flex items-center gap-3">
-              <span className="h-px flex-1 bg-border" aria-hidden />
-              <span id={CONTINUE_AS_ID} className="text-xs text-fg-subtle">Or continue as</span>
-              <span className="h-px flex-1 bg-border" aria-hidden />
-            </div>
+      <AuthDivider label="Or continue as" labelId={CONTINUE_AS_ID} className="mt-8" />
 
-            <DemoAccountList
-              className="mt-5"
-              labelledBy={CONTINUE_AS_ID}
-              selectedId={selectedId}
-              pendingId={pendingId}
-              busy={busy}
-              onChoose={choose}
-            />
+      <DemoAccountList
+        className="mt-5"
+        labelledBy={CONTINUE_AS_ID}
+        selectedId={selectedId}
+        pendingId={pendingId}
+        busy={anyBusy}
+        onChoose={choose}
+      />
 
-            <p className="mt-8 text-center text-sm text-fg-muted">
-              New to GigSyc?{" "}
-              <Link href="/events" className="font-medium text-navy-700 underline-offset-4 hover:underline">
-                Browse events
-              </Link>
-            </p>
-          </div>
-        </div>
+      <p className="mt-8 text-center text-sm text-fg-muted">
+        New to GigSyc?{" "}
+        <Link href={signUpHref} className="font-medium text-navy-700 underline-offset-4 hover:underline">
+          Create an account
+        </Link>
+      </p>
 
-        <p className="text-center text-xs text-fg-subtle">Prototype — no real accounts, payments or messages.</p>
-      </main>
-    </div>
+      <p className="mt-6 text-center text-xs text-fg-subtle">
+        Prototype — no real accounts, payments or messages.
+      </p>
+    </AuthLayout>
   );
 }

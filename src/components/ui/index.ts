@@ -23,3 +23,4 @@ export * from "./photo";
 export * from "./spinner";
 export * from "./data-list";
 export * from "./chart";
+export * from "./social-auth";

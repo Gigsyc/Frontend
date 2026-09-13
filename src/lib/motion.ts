@@ -19,9 +19,12 @@ export function useStaggerOnce(ready: boolean): (index: number) => MotionProps {
     const t = window.setTimeout(() => setDone(true), 450);
     return () => window.clearTimeout(t);
   }, [ready, done]);
+  // Once the entrance is over, the element must still be told where it rests. Returning
+  // only `initial: false` leaves motion holding whatever inline style it last wrote, which
+  // can strand a row at opacity 0 if the timer wins the race against the animation.
   return (index: number) =>
     done
-      ? { initial: false }
+      ? { initial: false, animate: { opacity: 1, y: 0 }, transition: { duration: 0 } }
       : {
           initial: { opacity: 0, y: 6 },
           animate: { opacity: 1, y: 0 },

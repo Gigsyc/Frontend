@@ -98,3 +98,55 @@ On the public event surfaces amber marks **time** (dates, "Today", featured). Na
 - Every state change toasts what happened in plain words: "Published. Kigali Jazz Junction is now live on the public site."
 - Lead pages with what needs attention, not with KPI walls. Four stat tiles maximum.
 - No photography beyond small thumbnails in tables.
+
+---
+
+# Iteration 3 — Authentication & onboarding
+
+Identity is now one layer. Everything else derives from it.
+
+## The auth layer (built, do not duplicate)
+`src/features/auth/`
+- `model.ts` — `personaForUser()`, `destinationForUser()`, `onboardingPathForRole()`
+- `auth-service.ts` — **the only seam to "the identity provider"**. Replace its bodies with real HTTP/OAuth later; nothing above it changes.
+- `auth-provider.tsx` — `useAuth()` → `{ user, persona, isAuthenticated, ready, login, loginWithGoogle, signup, logout, verifyEmail, completeOnboarding, completePartnerOnboarding, updateUser, setUser, destination }`
+- `guards.tsx` — `<RequireAuth>`, `<RequireRole roles={[...]}>`, `<RedirectIfAuthenticated>`, `<RequireOnboarding role>`
+
+**Components must never invent auth state.** Use `useAuth()`. The old `useSession`, `useEmployerSession`, `useWorkerSession`, `useCustomerSession`, `useAdminSession` still work — they are now derived views of the same user, so do not "fix" them.
+
+`ready` is false until localStorage is read. Always wait for it before redirecting, or a signed-in user gets bounced to /login on reload.
+
+## User model
+`AuthUser` in `src/types/auth.ts`: `id, name, email, role, avatarColor, emailVerified, onboardingCompleted, signInMethod, createdAt, location?, interests[], discoveryPreference?, organization?, employerId?, workerId?, platformUserId?`.
+
+Roles: `customer` · `partner` · `worker` · `admin`. Partner maps to the existing Employer record, so a partner's workspace is the employer portal.
+
+## Routing rules — centralised, do not re-implement
+```
+signed out + protected page  → /login?next=…
+signed in + /login|/signup   → destinationForUser(user)
+email signup, unverified     → /verify-email
+onboarding not completed     → /onboarding (customer) · /onboarding/partner · /worker/onboarding
+customer                     → /events
+partner                      → /partner
+worker                       → /worker
+admin                        → /admin   (admins never see consumer onboarding)
+```
+
+## Shared shells (built, reuse them)
+- `AuthLayout` + `AUTH_PANELS` + `AuthHeading` — `src/components/layout/auth-layout.tsx`. Photo left from `lg`, form right, photo dropped entirely below `lg`. Used by /login, /signup, /forgot-password, /reset-password, /verify-email.
+- `OnboardingShell` + `OnboardingProgress` + `OnboardingHeading` + `SelectTile` — `src/components/layout/onboarding-shell.tsx`. Slim bar and "2 of 3", sticky footer action.
+- `GoogleButton` + `AppleButton` + `GoogleMark` + `AppleMark` + `AuthDivider` — `src/components/ui/social-auth.tsx` (the old `google-button.tsx` path still re-exports these). Both marks are the providers' official assets; never redraw, recolour or restyle them. Google's button is white with a hairline border, Apple's is black with a white mark — that contrast is deliberate and required by their guidelines. Stack them in that order above the `AuthDivider` on both /login and /signup.
+
+## Federated sign-in — the safety rule
+The simulated choosers **must never ask for a password, PIN or any credential**. Each presents accounts from `src/data/mocks/accounts.ts` (`GOOGLE_ACCOUNTS`, `APPLE_ACCOUNTS`), the person picks one, and `loginWithGoogle()` / `loginWithApple()` returns a user. Label every such dialog plainly as a prototype simulation. A fake provider credential form is a phishing pattern and is forbidden.
+
+Apple specifics worth honouring: one of the seeded Apple IDs has `hideMyEmail: true`. When that account is chosen, sign in with a relay address at `APPLE_RELAY_DOMAIN` rather than the real one, and say so in one quiet line — it is what Apple actually does and it changes what an organiser sees. Federated accounts arrive with `emailVerified: true` and therefore skip /verify-email.
+
+## Onboarding rules
+Customer: 3 steps (welcome is part of step one, then location, then interests) plus an optional preference step. Maximum 4. Partner: organisation, contact, location, done. `onboardingCompleted` is set once and never asked again.
+
+Interests live in `INTERESTS` / `INTEREST_LIST` (`src/data/auth.ts`) with `categoriesForInterests()` mapping them to event categories for mock personalisation. Say "Because you like culture", never imply a real recommendation engine.
+
+## Email verification
+Six-digit code, any six digits accepted. No developer button anywhere in the design.

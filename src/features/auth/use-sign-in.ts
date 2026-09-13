@@ -1,37 +1,45 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { HOME_FOR_ROLE, useSession } from "@/features/session";
-import type { DemoAccount } from "./accounts";
+import { authService } from "./auth-service";
+import { useAuth } from "./auth-provider";
+import type { DemoAccount, LoginHint } from "./accounts";
 
-/** Enough simulated work that the pending state reads as real, not as a flicker. */
-const SIGN_IN_MS = 700;
+/** Demo row → seeded account. The login page names people, not persona objects. */
+const ACCOUNT_FOR_HINT: Record<LoginHint, string> = {
+  customer: "ac_chantal",
+  organizer: "ac_diane",
+  worker: "ac_aline",
+  admin: "ac_patrick",
+};
 
 /**
- * Composes the session store with the router: one sign-in at a time, a visible pending
- * state on whichever control started it, then persona + redirect.
+ * Signs in one of the seeded demo accounts. Real credential sign-in goes through
+ * `useAuth().login` instead.
+ *
+ * It does not navigate: the login page's `<RedirectIfAuthenticated>` is the single
+ * navigator for every way in, so the row keeps whatever `?next=` the page was given
+ * instead of pushing a destination that would then be replaced.
  */
 export function useSignIn() {
-  const router = useRouter();
-  const { signIn } = useSession();
+  const { setUser } = useAuth();
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   /** `source` is the control to show as loading — an account id, or "form". */
-  const enter = useCallback((account: DemoAccount, source: string) => {
-    if (timer.current) return;
+  const enter = useCallback(async (account: DemoAccount, source: string) => {
+    if (pendingId) return;
     setPendingId(source);
-    timer.current = setTimeout(() => {
-      timer.current = null;
-      signIn(account.persona);
+    try {
+      const user = await authService.getAccount(ACCOUNT_FOR_HINT[account.id]);
+      // Stays pending: writing the session is what moves the page on, so the row never settles back.
+      setUser(user);
       toast.success("Signed in", { description: `${account.name} · opening ${account.landing}.` });
-      router.push(HOME_FOR_ROLE[account.persona.role]);
-    }, SIGN_IN_MS);
-  }, [router, signIn]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "We couldn't sign you in.");
+      setPendingId(null);
+    }
+  }, [pendingId, setUser]);
 
   return { enter, pendingId, busy: pendingId !== null };
 }

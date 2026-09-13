@@ -67,10 +67,6 @@ export const DEMO_ACCOUNTS: DemoAccount[] = SPECS.map((spec) => {
   return { ...spec, name: user.name, email: user.email, avatarColor: user.avatarColor };
 });
 
-/** An unrecognised email still gets in — as the customer, the least privileged persona. */
-export const FALLBACK_ACCOUNT: DemoAccount =
-  DEMO_ACCOUNTS.find((a) => a.id === "customer") ?? DEMO_ACCOUNTS[0];
-
 /** `?as=employer` and `?as=organizer` both point at Diane: one record, two vocabularies. */
 export function accountForHint(hint: string | null | undefined): DemoAccount | undefined {
   if (!hint) return undefined;

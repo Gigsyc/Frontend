@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Onest } from "next/font/google";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/lib/query/provider";
-import { SessionProvider } from "@/features/session";
+import { AuthProvider } from "@/features/auth";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -26,9 +26,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${onest.variable} h-full`}>
       <body className="flex min-h-full flex-col">
         <QueryProvider>
-          <SessionProvider>
+          <AuthProvider>
             <TooltipProvider>{children}</TooltipProvider>
-          </SessionProvider>
+          </AuthProvider>
         </QueryProvider>
         <Toaster
           position="bottom-center"
