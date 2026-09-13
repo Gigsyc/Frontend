@@ -1,0 +1,182 @@
+"use client";
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
+import { EVENT_CATEGORIES, PLACES, WHEN_OPTIONS, type WhenValue } from "@/data/events";
+import type { EventCategory, EventFilters, RwandaPlace } from "@/types";
+
+export type EventSort = NonNullable<EventFilters["sort"]>;
+export type PriceFilter = NonNullable<EventFilters["price"]>;
+export type EventsView = "all" | "saved";
+
+/** Everything /events can be narrowed by. Lives in the URL so a filtered board is shareable. */
+export interface EventsFilterState {
+  query: string;
+  when: WhenValue;
+  categories: EventCategory[];
+  place: RwandaPlace | "all";
+  price: PriceFilter;
+  sort: EventSort;
+  view: EventsView;
+}
+
+export const DEFAULT_EVENTS_STATE: EventsFilterState = {
+  query: "",
+  when: "all",
+  categories: [],
+  place: "all",
+  price: "all",
+  sort: "soonest",
+  view: "all",
+};
+
+export const SORT_OPTIONS: Array<{ value: EventSort; label: string }> = [
+  { value: "soonest", label: "Soonest" },
+  { value: "popular", label: "Most popular" },
+  { value: "price_asc", label: "Price low to high" },
+  { value: "newest", label: "Newly added" },
+];
+
+export const PRICE_OPTIONS: Array<{ value: PriceFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "free", label: "Free" },
+  { value: "paid", label: "Paid" },
+];
+
+/** How the sort reads in the result-count line: "38 events · soonest first". */
+export const SORT_SUFFIX: Record<EventSort, string> = {
+  soonest: "soonest first",
+  popular: "most popular first",
+  price_asc: "price, low to high",
+  newest: "newly added first",
+};
+
+const WHEN_PHRASE: Record<WhenValue, string> = {
+  all: "",
+  today: " today",
+  tomorrow: " tomorrow",
+  weekend: " this weekend",
+  week: " in the next 7 days",
+  month: " this month",
+};
+
+interface ParamsLike {
+  get(name: string): string | null;
+}
+
+const isCategory = (v: string): v is EventCategory => v in EVENT_CATEGORIES;
+const isPlace = (v: string | null): v is RwandaPlace => !!v && (PLACES as string[]).includes(v);
+const isWhen = (v: string | null): v is WhenValue => WHEN_OPTIONS.some((o) => o.value === v);
+const isSort = (v: string | null): v is EventSort => SORT_OPTIONS.some((o) => o.value === v);
+const isPrice = (v: string | null): v is PriceFilter => PRICE_OPTIONS.some((o) => o.value === v);
+
+export function parseEventParams(sp: ParamsLike): EventsFilterState {
+  const when = sp.get("when");
+  const sort = sp.get("sort");
+  const price = sp.get("price");
+  const place = sp.get("place");
+  return {
+    query: sp.get("q") ?? "",
+    when: isWhen(when) ? when : "all",
+    categories: (sp.get("cat") ?? "").split(",").filter(Boolean).filter(isCategory),
+    place: isPlace(place) ? place : "all",
+    price: isPrice(price) ? price : "all",
+    sort: isSort(sort) ? sort : "soonest",
+    view: sp.get("view") === "saved" ? "saved" : "all",
+  };
+}
+
+export function serializeEventParams(s: EventsFilterState): URLSearchParams {
+  const p = new URLSearchParams();
+  if (s.view === "saved") p.set("view", "saved");
+  if (s.query.trim()) p.set("q", s.query.trim());
+  if (s.when !== "all") p.set("when", s.when);
+  if (s.categories.length) p.set("cat", s.categories.join(","));
+  if (s.place !== "all") p.set("place", s.place);
+  if (s.price !== "all") p.set("price", s.price);
+  if (s.sort !== "soonest") p.set("sort", s.sort);
+  return p;
+}
+
+/** Filters handed to `useEvents`. Every narrowing, `when` included, is applied by the store. */
+export function toEventFilters(s: EventsFilterState): EventFilters {
+  const f: EventFilters = { sort: s.sort };
+  if (s.when !== "all") f.when = s.when;
+  if (s.query.trim()) f.query = s.query.trim();
+  if (s.categories.length) f.categories = s.categories;
+  if (s.place !== "all") f.places = [s.place];
+  if (s.price !== "all") f.price = s.price;
+  return f;
+}
+
+export function hasActiveFilters(s: EventsFilterState): boolean {
+  return !!s.query.trim() || s.when !== "all" || s.categories.length > 0 || s.place !== "all" || s.price !== "all";
+}
+
+/** Filters that live behind the mobile "Filters" sheet — drives its count badge. */
+export function sheetFilterCount(s: EventsFilterState): number {
+  return (s.place !== "all" ? 1 : 0) + (s.price !== "all" ? 1 : 0) + (s.sort !== "soonest" ? 1 : 0);
+}
+
+export interface ActiveFilterChip {
+  key: string;
+  label: string;
+  patch: Partial<EventsFilterState>;
+}
+
+export function activeFilterChips(s: EventsFilterState): ActiveFilterChip[] {
+  const chips: ActiveFilterChip[] = [];
+  if (s.query.trim()) chips.push({ key: "q", label: `"${s.query.trim()}"`, patch: { query: "" } });
+  if (s.when !== "all") {
+    const label = WHEN_OPTIONS.find((o) => o.value === s.when)?.label ?? "";
+    chips.push({ key: "when", label, patch: { when: "all" } });
+  }
+  for (const c of s.categories) {
+    chips.push({ key: `cat-${c}`, label: EVENT_CATEGORIES[c].label, patch: { categories: s.categories.filter((x) => x !== c) } });
+  }
+  if (s.place !== "all") chips.push({ key: "place", label: s.place, patch: { place: "all" } });
+  if (s.price !== "all") chips.push({ key: "price", label: s.price === "free" ? "Free" : "Paid", patch: { price: "all" } });
+  return chips;
+}
+
+/** "No free events in Musanze this weekend." — the empty state names what was asked for. */
+export function emptyResultLine(s: EventsFilterState): string {
+  const subject =
+    s.price === "free" ? "free events"
+      : s.price === "paid" ? "paid events"
+        : s.categories.length === 1 ? `${EVENT_CATEGORIES[s.categories[0]].label.toLowerCase()} events`
+          : "events";
+  const query = s.query.trim() ? ` matching "${s.query.trim()}"` : "";
+  const place = s.place !== "all" ? ` in ${s.place}` : "";
+  return `No ${subject}${query}${place}${WHEN_PHRASE[s.when]}.`;
+}
+
+/**
+ * Filter state in the URL. `resetCount` bumps on clear so the uncontrolled search box can
+ * remount instead of fighting a pending debounce.
+ */
+export function useEventFilters() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [resetCount, setResetCount] = useState(0);
+
+  const state = useMemo(() => parseEventParams(searchParams), [searchParams]);
+
+  const replace = useCallback(
+    (next: EventsFilterState) => {
+      const qs = serializeEventParams(next).toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname],
+  );
+
+  const update = useCallback((patch: Partial<EventsFilterState>) => replace({ ...state, ...patch }), [replace, state]);
+
+  const clear = useCallback(() => {
+    replace({ ...DEFAULT_EVENTS_STATE, view: state.view });
+    setResetCount((c) => c + 1);
+  }, [replace, state.view]);
+
+  return { state, update, clear, resetCount };
+}
