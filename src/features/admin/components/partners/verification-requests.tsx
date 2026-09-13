@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SECTORS } from "@/data/roles";
+import { useStaggerOnce } from "@/lib/motion";
 import { formatDate, pluralize } from "@/lib/utils";
 import type { Employer } from "@/types";
 import type { PartnerRow } from "./use-partner-rows";
@@ -17,13 +18,6 @@ interface Props {
   rows: PartnerRow[];
   onVerify: (partner: Employer) => void;
 }
-
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const rowIn = (i: number) => ({
-  initial: { opacity: 0, y: 6 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3, ease: EASE, delay: Math.min(i, 7) * 0.03 },
-});
 
 function decline(row: PartnerRow) {
   const who = row.contact?.name ?? row.partner.contact.name;
@@ -34,6 +28,8 @@ function decline(row: PartnerRow) {
 
 /** Leads the page: the partners waiting on a human decision. */
 export function VerificationRequests({ rows, onVerify }: Props) {
+  const stagger = useStaggerOnce(rows.length > 0);
+
   return (
     <Card>
       <CardHeader>
@@ -52,7 +48,7 @@ export function VerificationRequests({ rows, onVerify }: Props) {
             const { partner } = row;
             const contactName = row.contact?.name ?? partner.contact.name;
             return (
-              <motion.div key={partner.id} {...rowIn(i)} className="rounded-lg border border-border p-4">
+              <motion.div key={partner.id} {...stagger(i)} className="rounded-lg border border-border p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
                     <EmployerMark employer={partner} size="md" />

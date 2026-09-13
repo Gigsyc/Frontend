@@ -3,35 +3,51 @@
 import { useMemo, useState } from "react";
 import { MapPinned } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { useAdminDestinations, useAdminEvents, useUpdateDestination } from "@/features/admin";
 import { errorMessage, pluralize } from "@/lib/utils";
-import type { Destination } from "@/types";
+import type { AdminEventFilters, Destination } from "@/types";
 import { DestinationsSkeleton } from "./destinations-skeleton";
 import { DestinationsTable, type DestinationFlag } from "./destinations-table";
 import { EditDestinationSheet } from "./edit-destination-sheet";
 
-const FLAG_COPY: Record<DestinationFlag, (name: string, on: boolean) => string> = {
-  featured: (name, on) => (on ? `${name} is now featured on the public site.` : `${name} is no longer featured.`),
-  published: (name, on) => (on ? `${name} is back in “Browse by place”.` : `${name} is hidden from “Browse by place”.`),
+/** The store applies the status filter; this screen only counts what it hands back. */
+const PUBLISHED_ONLY: AdminEventFilters = { statuses: ["published"] };
+
+interface FlagCopy {
+  title: string;
+  description?: string;
+}
+
+/**
+ * Featured is an internal mark for now — nothing on the public site reads it, so the toast says so
+ * rather than claiming an effect customers would never see. Published is the one that really moves.
+ */
+const FLAG_COPY: Record<DestinationFlag, (name: string, on: boolean) => FlagCopy> = {
+  featured: (name, on) =>
+    on
+      ? { title: `${name} is marked as featured.`, description: "An internal mark for the events team — the public places row is ordered by how many events are on." }
+      : { title: `${name} is no longer marked as featured.` },
+  published: (name, on) =>
+    on
+      ? { title: `${name} is back in “Browse by place”.` }
+      : { title: `${name} is hidden from “Browse by place”.` },
 };
 
 /** /admin/destinations — the eight places, their copy, and whether the public site shows them. */
 export function DestinationsScreen() {
   const destinations = useAdminDestinations();
-  const events = useAdminEvents({});
+  const events = useAdminEvents(PUBLISHED_ONLY);
   const update = useUpdateDestination();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [editing, setEditing] = useState<Destination | null>(null);
 
   const publishedEvents = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const e of events.data ?? []) {
-      if (e.status !== "published") continue;
-      counts[e.place] = (counts[e.place] ?? 0) + 1;
-    }
+    for (const e of events.data ?? []) counts[e.place] = (counts[e.place] ?? 0) + 1;
     return counts;
   }, [events.data]);
 
@@ -41,7 +57,10 @@ export function DestinationsScreen() {
     update.mutate(
       { id: destination.id, patch: { [flag]: value } },
       {
-        onSuccess: () => toast.success(FLAG_COPY[flag](destination.name, value)),
+        onSuccess: () => {
+          const { title, description } = FLAG_COPY[flag](destination.name, value);
+          toast.success(title, description ? { description } : undefined);
+        },
         onError: (err) => toast.error(errorMessage(err, "We couldn't save that. Try again.")),
         onSettled: () => setPendingKey((k) => (k === key ? null : k)),
       },
@@ -50,6 +69,7 @@ export function DestinationsScreen() {
 
   const list = destinations.data ?? [];
   const publishedPlaces = list.filter((d) => d.published).length;
+  const totalLive = Object.values(publishedEvents).reduce((a, b) => a + b, 0);
 
   return (
     <div className="space-y-6">
@@ -70,12 +90,22 @@ export function DestinationsScreen() {
         <>
           <p className="text-[13px] text-fg-muted">
             <span className="tabular">{publishedPlaces}</span> of <span className="tabular">{list.length}</span> published ·{" "}
-            {events.isPending ? "counting live events…" : `${pluralize(Object.values(publishedEvents).reduce((a, b) => a + b, 0), "live event")} across them`}
+            {events.isPending ? (
+              "counting live events…"
+            ) : events.isError ? (
+              <>
+                we couldn&rsquo;t count live events.{" "}
+                <Button variant="link" className="text-[13px]" onClick={() => void events.refetch()} loading={events.isRefetching}>Try again</Button>
+              </>
+            ) : (
+              `${pluralize(totalLive, "live event")} across them`
+            )}
           </p>
           <Card className="overflow-hidden">
             <DestinationsTable
               destinations={list}
               publishedEvents={publishedEvents}
+              countsUnavailable={events.isError}
               pendingKey={pendingKey}
               onToggle={toggle}
               onEdit={setEditing}

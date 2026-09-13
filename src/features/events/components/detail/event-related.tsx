@@ -11,9 +11,9 @@ import { stagger } from "./utils";
 
 interface RelatedProps {
   event: Event;
-  savedIds: string[];
+  savedIds: ReadonlySet<string>;
   onToggleSave: (event: Event) => void;
-  /** Finished events lead with what is on next, so the section gets a surface of its own. */
+  /** Events that are no longer on lead with what is next, so the section gets a surface of its own. */
   prominent?: boolean;
 }
 
@@ -56,7 +56,13 @@ export function EventRelated({ event, savedIds, onToggleSave, prominent }: Relat
     <section aria-labelledby="related-heading" className={cn("space-y-4", prominent && "rounded-lg bg-surface p-5 shadow-card sm:p-6")}>
       <div>
         <h2 id="related-heading" className="text-lg font-semibold">{heading}</h2>
-        {prominent ? <p className="mt-0.5 text-sm text-fg-muted">This one has finished — here is what is coming up next.</p> : null}
+        {prominent ? (
+          <p className="mt-0.5 text-sm text-fg-muted">
+            {event.status === "cancelled"
+              ? "This one was called off — here is what is still on."
+              : "This one has finished — here is what is coming up next."}
+          </p>
+        ) : null}
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {related.map((e, i) => (
@@ -64,7 +70,7 @@ export function EventRelated({ event, savedIds, onToggleSave, prominent }: Relat
             <EventCard
               event={e}
               organizerName={employersQ.data?.find((emp) => emp.id === e.organizerId)?.name}
-              saved={savedIds.includes(e.id)}
+              saved={savedIds.has(e.id)}
               onToggleSave={() => onToggleSave(e)}
               className="h-full"
             />

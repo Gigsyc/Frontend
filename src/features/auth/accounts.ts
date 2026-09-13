@@ -1,4 +1,3 @@
-import { EMPLOYER_USERS } from "@/data/mocks/employers";
 import { PLATFORM_USERS } from "@/data/mocks/platform";
 import { DEMO_PERSONAS } from "@/features/session";
 import type { Persona } from "@/types";
@@ -20,12 +19,8 @@ export interface DemoAccount {
   employerId?: string;
 }
 
-interface AccountSpec extends Omit<DemoAccount, "name" | "email" | "avatarColor"> {
-  /** Work address, when the person signs in with an organisation account rather than a personal one. */
-  email?: string;
-}
-
-const diane = EMPLOYER_USERS.find((u) => u.id === DEMO_PERSONAS.organizer.userId);
+/** Everything the login page states itself; name, email and colour come from the platform user. */
+type AccountSpec = Omit<DemoAccount, "name" | "email" | "avatarColor">;
 
 const SPECS: AccountSpec[] = [
   {
@@ -33,7 +28,7 @@ const SPECS: AccountSpec[] = [
     role: "Explorer · discovers events", landing: "events around Rwanda",
   },
   {
-    id: "organizer", persona: DEMO_PERSONAS.organizer, email: diane?.email,
+    id: "organizer", persona: DEMO_PERSONAS.organizer,
     role: "Partner · Ikaze Hospitality Group", landing: "the Ikaze workspace",
     employerId: DEMO_PERSONAS.organizer.employerId,
   },
@@ -61,19 +56,23 @@ function platformUserFor(persona: Persona) {
 
 /**
  * Names, emails and avatar colours are read from the platform user records so the login
- * page can never drift from the people the admin console lists.
+ * page can never drift from the people the admin console lists. A seed id that stops
+ * resolving fails here rather than quietly removing a way into the prototype.
  */
-export const DEMO_ACCOUNTS: DemoAccount[] = SPECS.flatMap(({ email, ...spec }) => {
+export const DEMO_ACCOUNTS: DemoAccount[] = SPECS.map((spec) => {
   const user = platformUserFor(spec.persona);
-  return user ? [{ ...spec, name: user.name, email: email ?? user.email, avatarColor: user.avatarColor }] : [];
+  if (!user) {
+    throw new Error(`No platform user is linked to the "${spec.id}" demo account — check the seed ids in data/mocks/platform.ts.`);
+  }
+  return { ...spec, name: user.name, email: user.email, avatarColor: user.avatarColor };
 });
 
 /** An unrecognised email still gets in — as the customer, the least privileged persona. */
-export const FALLBACK_ACCOUNT: DemoAccount | undefined =
+export const FALLBACK_ACCOUNT: DemoAccount =
   DEMO_ACCOUNTS.find((a) => a.id === "customer") ?? DEMO_ACCOUNTS[0];
 
 /** `?as=employer` and `?as=organizer` both point at Diane: one record, two vocabularies. */
-export function accountForHint(hint: string | null): DemoAccount | undefined {
+export function accountForHint(hint: string | null | undefined): DemoAccount | undefined {
   if (!hint) return undefined;
   const id = hint === "employer" ? "organizer" : hint;
   return DEMO_ACCOUNTS.find((a) => a.id === id);

@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DataList } from "@/components/ui/data-list";
-import { SectionHeading } from "@/components/ui/page-header";
+import { formatTimeRange } from "@/lib/utils";
 import type { Event } from "@/types";
 import { eventHours, formatHours, fullDateLabel, isMultiDay, mapsUrl, stagger } from "./utils";
 
@@ -57,7 +57,7 @@ export function EventWhenWhere({ event }: { event: Event }) {
             { label: "Doors open", value: event.doorsOpen ? event.doorsOpen : "At the start time" },
             {
               label: multiDay ? "Each day" : "Time",
-              value: <span className="tabular">{event.startTime} – {event.endTime} · {hours}</span>,
+              value: <span className="tabular">{formatTimeRange(event.startTime, event.endTime)} · {hours}</span>,
             },
             { label: "Venue", value: event.venue },
           ]}
@@ -86,7 +86,7 @@ export function EventGoodToKnow({ event }: { event: Event }) {
 
   return (
     <section aria-labelledby="good-to-know-heading" className="space-y-4">
-      <SectionHeading title="Good to know" />
+      <h2 id="good-to-know-heading" className="text-lg font-semibold">Good to know</h2>
       <Card className="space-y-4 p-4 sm:p-5">
         <ul className="space-y-2.5">
           {event.ageRestriction ? (

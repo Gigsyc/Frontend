@@ -5,9 +5,13 @@ import { ExternalLink, MoreHorizontal, SquarePen } from "lucide-react";
 import {
   Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Tooltip,
 } from "@/components/ui";
+import { isPubliclyReachable } from "@/data/events";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/types";
 import { actionsFor, type EventActionDef } from "./event-actions";
+
+/** Why the public link is unavailable — the same sentence for the eye and for a screen reader. */
+const NO_PUBLIC_PAGE = "Draft, pending and rejected events have no public page.";
 
 interface Props {
   event: Event;
@@ -19,7 +23,9 @@ interface Props {
 /** The ⋯ menu on an events row. Clicks never reach the row's navigate handler. */
 export function EventRowMenu({ event, onAction, triggerClassName }: Props) {
   const actions = actionsFor(event.status);
-  const published = event.status === "published";
+  // Cancelled and completed events stay reachable by direct link, and that page is exactly what
+  // an operator needs to check ("does a ticket holder see why this was called off?").
+  const reachable = isPubliclyReachable(event.status);
 
   return (
     <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="inline-flex">
@@ -39,17 +45,22 @@ export function EventRowMenu({ event, onAction, triggerClassName }: Props) {
           <DropdownMenuItem asChild>
             <Link href={`/admin/events/${event.id}`}><SquarePen /> Open</Link>
           </DropdownMenuItem>
-          {published ? (
+          {reachable ? (
             <DropdownMenuItem asChild>
               <Link href={`/events/${event.slug}`}><ExternalLink /> View on public site</Link>
             </DropdownMenuItem>
           ) : (
-            <Tooltip content="Only published events have a public page." side="left">
-              <div>
-                <DropdownMenuItem disabled className="data-[disabled]:pointer-events-auto">
-                  <ExternalLink /> View on public site
-                </DropdownMenuItem>
-              </div>
+            /* `aria-disabled`, not `disabled`: Radix skips disabled items with the arrow keys, so
+               a keyboard user would never reach the item or hear why it does nothing. */
+            <Tooltip content={NO_PUBLIC_PAGE} side="left">
+              <DropdownMenuItem
+                aria-disabled
+                onSelect={(e) => e.preventDefault()}
+                className="cursor-default opacity-50"
+              >
+                <ExternalLink /> View on public site
+                <span className="sr-only"> — {NO_PUBLIC_PAGE}</span>
+              </DropdownMenuItem>
             </Tooltip>
           )}
         </DropdownMenuContent>

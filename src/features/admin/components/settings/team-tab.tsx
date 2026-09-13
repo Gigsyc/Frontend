@@ -42,7 +42,7 @@ export function TeamTab() {
         <div>
           <CardTitle>Team</CardTitle>
           <CardDescription>
-            {users.isPending ? "Who can open this console." : `${pluralize(admins.length, "person")} with access to the admin console.`}
+            {users.isPending ? "Who can open this console." : `${pluralize(admins.length, "person", "people")} with access to the admin console.`}
           </CardDescription>
         </div>
         <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}><UserPlus /> Invite admin</Button>

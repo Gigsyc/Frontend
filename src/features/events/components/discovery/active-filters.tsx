@@ -1,12 +1,13 @@
 "use client";
 
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { activeFilterChips, type EventsFilterState } from "../../hooks";
+import { activeFilterChips, type EventsFilterPatch, type EventsFilterState } from "../../hooks";
 
 interface ActiveFiltersProps {
   state: EventsFilterState;
-  onChange: (patch: Partial<EventsFilterState>) => void;
+  onChange: (patch: EventsFilterPatch) => void;
   onClear: () => void;
 }
 
@@ -19,8 +20,15 @@ export function ActiveFilters({ state, onChange, onClear }: ActiveFiltersProps) 
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-[13px] text-fg-muted">Active filters</span>
       {chips.map((chip) => (
-        <Chip key={chip.key} selected onRemove={() => onChange(chip.patch)} onClick={() => onChange(chip.patch)} className="h-8">
+        <Chip
+          key={chip.key}
+          selected
+          onClick={() => onChange(chip.patch)}
+          aria-label={`Remove ${chip.label} filter`}
+          className="h-8"
+        >
           {chip.label}
+          <X className="-mr-0.5 size-3" aria-hidden />
         </Chip>
       ))}
       {chips.length > 1 ? (

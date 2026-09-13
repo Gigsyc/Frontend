@@ -3,15 +3,9 @@
 import { motion } from "motion/react";
 import { Progress } from "@/components/ui/progress";
 import { ServiceStatusBadge } from "@/components/ui/status-badge";
+import { useStaggerOnce } from "@/lib/motion";
 import { formatTimeAgo } from "@/lib/utils";
 import type { SystemService } from "@/types";
-
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const rowIn = (i: number) => ({
-  initial: { opacity: 0, y: 6 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3, ease: EASE, delay: Math.min(i, 7) * 0.03 },
-});
 
 const uptimeTone = (v: number) => (v >= 99.9 ? "success" : v >= 99 ? "navy" : "amber");
 const pct = (v: number) => `${v.toFixed(2)}%`;
@@ -37,6 +31,8 @@ function Note({ service }: { service: SystemService }) {
 }
 
 export function ServicesTable({ services }: { services: SystemService[] }) {
+  const stagger = useStaggerOnce(services.length > 0);
+
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
@@ -51,7 +47,7 @@ export function ServicesTable({ services }: { services: SystemService[] }) {
           </thead>
           <tbody>
             {services.map((s, i) => (
-              <motion.tr key={s.id} {...rowIn(i)} className="border-b border-border last:border-0">
+              <motion.tr key={s.id} {...stagger(i)} className="border-b border-border last:border-0">
                 <td className="px-5 py-3.5 align-top">
                   <p className="font-medium text-fg">{s.name}</p>
                   <p className="text-xs text-fg-muted">{s.description}</p>
@@ -68,7 +64,7 @@ export function ServicesTable({ services }: { services: SystemService[] }) {
 
       <ul className="divide-y divide-border md:hidden">
         {services.map((s, i) => (
-          <motion.li key={s.id} {...rowIn(i)} className="flex flex-col gap-2.5 p-4">
+          <motion.li key={s.id} {...stagger(i)} className="flex flex-col gap-2.5 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium leading-5 text-fg">{s.name}</p>

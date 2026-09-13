@@ -28,7 +28,7 @@ const UNPUBLISH: EventActionDef = {
   id: "unpublish", label: "Unpublish", status: "draft", icon: EyeOff, primary: true,
   confirm: {
     title: "Unpublish this event?",
-    body: "It disappears from /events and its public page right away. The listing stays here as a draft, so you can publish it again once the organiser sorts things out.",
+    body: "It disappears from /events and its public page right away. The event stays here as a draft, so you can publish it again once the organiser sorts things out.",
     cta: "Unpublish",
   },
 };

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserStatusBadge } from "@/components/ui/status-badge";
+import { useStaggerOnce } from "@/lib/motion";
 import { formatDate, formatTimeAgo } from "@/lib/utils";
 import type { PlatformUser } from "@/types";
 import { ACTION_LABEL, actionsFor, type UserAction } from "./user-actions";
@@ -19,21 +20,14 @@ interface Props {
   onAction: (user: PlatformUser, action: UserAction) => void;
 }
 
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const rowIn = (i: number) => ({
-  initial: { opacity: 0, y: 6 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3, ease: EASE, delay: Math.min(i, 7) * 0.03 },
-});
-
 const ACTION_ICON: Record<UserAction, LucideIcon> = { approve: CheckCircle2, suspend: PauseCircle, reactivate: PlayCircle };
 
-function RowMenu({ user, onAction }: { user: PlatformUser; onAction: Props["onAction"] }) {
+function RowMenu({ user, onAction, className }: { user: PlatformUser; onAction: Props["onAction"]; className?: string }) {
   const actions = actionsFor(user.status);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${user.name}`}><MoreHorizontal /></Button>
+        <Button variant="ghost" size="icon-sm" className={className} aria-label={`Actions for ${user.name}`}><MoreHorizontal /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {actions.map((a) => {
@@ -58,6 +52,8 @@ function RowMenu({ user, onAction }: { user: PlatformUser; onAction: Props["onAc
 }
 
 export function UsersTable({ users, onAction }: Props) {
+  const stagger = useStaggerOnce(users.length > 0);
+
   return (
     <>
       <div className="hidden overflow-x-auto lg:block">
@@ -76,7 +72,7 @@ export function UsersTable({ users, onAction }: Props) {
           </thead>
           <tbody>
             {users.map((u, i) => (
-              <motion.tr key={u.id} {...rowIn(i)} className="border-b border-border last:border-0 hover:bg-ink-50">
+              <motion.tr key={u.id} {...stagger(i)} className="border-b border-border last:border-0 hover:bg-ink-50">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar name={u.name} color={u.avatarColor} size="sm" />
@@ -101,7 +97,7 @@ export function UsersTable({ users, onAction }: Props) {
 
       <ul className="divide-y divide-border lg:hidden">
         {users.map((u, i) => (
-          <motion.li key={u.id} {...rowIn(i)} className="flex items-start gap-3 p-4">
+          <motion.li key={u.id} {...stagger(i)} className="flex items-start gap-3 p-4">
             <Avatar name={u.name} color={u.avatarColor} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium leading-5 text-fg">{u.name}</p>
@@ -114,7 +110,7 @@ export function UsersTable({ users, onAction }: Props) {
                 {u.place} · joined <span className="tabular">{formatDate(u.joinedAt)}</span> · active {formatTimeAgo(u.lastActiveAt)} · <span className="tabular">{u.eventsAttended}</span> events
               </p>
             </div>
-            <div className="flex size-11 shrink-0 items-center justify-center"><RowMenu user={u} onAction={onAction} /></div>
+            <RowMenu user={u} onAction={onAction} className="size-11 shrink-0" />
           </motion.li>
         ))}
       </ul>

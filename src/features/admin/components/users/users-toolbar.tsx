@@ -1,8 +1,9 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input, Select } from "@/components/ui/input";
+import { useDebouncedValue } from "../../hooks/use-debounced-value";
 import {
   ROLE_OPTIONS, STATUS_OPTIONS,
   type RoleFilter, type StatusFilter, type UserFilterState,
@@ -13,16 +14,27 @@ interface Props {
   onChange: (patch: Partial<UserFilterState>) => void;
 }
 
+/**
+ * Typing debounces to one URL write per word. `onChange` stays in the deps so the write always
+ * carries the role and status that are current when it fires, not the ones captured mid-keystroke.
+ */
 export function UsersToolbar({ state, onChange }: Props) {
   const [text, setText] = useState(state.query);
+  const debounced = useDebouncedValue(text, 250);
+  const pushed = useRef(state.query);
 
   useEffect(() => {
-    if (text === state.query) return;
-    const t = setTimeout(() => onChange({ query: text }), 250);
-    return () => clearTimeout(t);
-    // Only typing re-arms the timer; the URL catching up must not cancel a pending write.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+    if (debounced === pushed.current) return;
+    pushed.current = debounced;
+    onChange({ query: debounced });
+  }, [debounced, onChange]);
+
+  // The URL is the source of truth: "Clear filters" and the back button mirror back into the box.
+  useEffect(() => {
+    if (state.query === pushed.current) return;
+    pushed.current = state.query;
+    setText(state.query);
+  }, [state.query]);
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

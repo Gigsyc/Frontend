@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmployerVerifiedMark } from "@/components/ui/verified";
 import { SECTORS } from "@/data/roles";
+import { useStaggerOnce } from "@/lib/motion";
 import type { Employer } from "@/types";
 import type { PartnerRow } from "./use-partner-rows";
 
@@ -17,20 +18,13 @@ interface Props {
   onRevoke: (partner: Employer) => void;
 }
 
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const rowIn = (i: number) => ({
-  initial: { opacity: 0, y: 6 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3, ease: EASE, delay: Math.min(i, 7) * 0.03 },
-});
-
 const eventsHref = (partner: Employer) => `/admin/events?q=${encodeURIComponent(partner.name)}`;
 
-function RowMenu({ partner, onRevoke }: { partner: Employer; onRevoke: Props["onRevoke"] }) {
+function RowMenu({ partner, onRevoke, className }: { partner: Employer; onRevoke: Props["onRevoke"]; className?: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${partner.name}`}><MoreHorizontal /></Button>
+        <Button variant="ghost" size="icon-sm" className={className} aria-label={`Actions for ${partner.name}`}><MoreHorizontal /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild>
@@ -52,6 +46,8 @@ function Mark({ partner }: { partner: Employer }) {
 }
 
 export function PartnersTable({ rows, onRevoke }: Props) {
+  const stagger = useStaggerOnce(rows.length > 0);
+
   return (
     <>
       <div className="hidden overflow-x-auto lg:block">
@@ -71,7 +67,7 @@ export function PartnersTable({ rows, onRevoke }: Props) {
           </thead>
           <tbody>
             {rows.map(({ partner, events, publishedEvents }, i) => (
-              <motion.tr key={partner.id} {...rowIn(i)} className="border-b border-border last:border-0 hover:bg-ink-50">
+              <motion.tr key={partner.id} {...stagger(i)} className="border-b border-border last:border-0 hover:bg-ink-50">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-3">
                     <EmployerMark employer={partner} size="sm" />
@@ -100,7 +96,7 @@ export function PartnersTable({ rows, onRevoke }: Props) {
 
       <ul className="divide-y divide-border lg:hidden">
         {rows.map(({ partner, events, publishedEvents }, i) => (
-          <motion.li key={partner.id} {...rowIn(i)} className="flex items-start gap-3 p-4">
+          <motion.li key={partner.id} {...stagger(i)} className="flex items-start gap-3 p-4">
             <EmployerMark employer={partner} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium leading-5 text-fg">{partner.name}</p>
@@ -112,7 +108,7 @@ export function PartnersTable({ rows, onRevoke }: Props) {
                 <span className="tabular">{partner.stats.avgRatingGiven.toFixed(1)}</span> rating given
               </p>
             </div>
-            <div className="flex size-11 shrink-0 items-center justify-center"><RowMenu partner={partner} onRevoke={onRevoke} /></div>
+            <RowMenu partner={partner} onRevoke={onRevoke} className="size-11 shrink-0" />
           </motion.li>
         ))}
       </ul>

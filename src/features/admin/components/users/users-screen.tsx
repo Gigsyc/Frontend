@@ -68,12 +68,20 @@ export function UsersScreen() {
 
           <Card className="overflow-hidden">
             {rows.length === 0 ? (
-              <EmptyState
-                icon={Users}
-                title="No one matches those filters"
-                description="Try a different role or status, or search for part of a name or email address."
-                action={<Button variant="outline" onClick={clear}>Clear filters</Button>}
-              />
+              filtered ? (
+                <EmptyState
+                  icon={Users}
+                  title="No one matches those filters"
+                  description="Try a different role or status, or search for part of a name or email address."
+                  action={<Button variant="outline" onClick={clear}>Clear filters</Button>}
+                />
+              ) : (
+                <EmptyState
+                  icon={Users}
+                  title="No accounts yet"
+                  description="Accounts appear here as soon as someone signs up."
+                />
+              )
             ) : (
               <UsersTable users={rows} onAction={(user, action) => setTarget({ user, action })} />
             )}

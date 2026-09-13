@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarRange, SearchX } from "lucide-react";
+import { CalendarRange, RefreshCw, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from "@/components/ui";
 import { useAdminEvents } from "@/features/admin/queries";
@@ -24,6 +24,7 @@ const EMPTY_COPY: Record<StatusTab, { title: string; description: string }> = {
 };
 
 const EMPTY_EVENTS: Event[] = [];
+const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 /** /admin/events — the review queue and the whole catalogue behind it. */
 export function AdminEventsScreen() {
@@ -32,7 +33,7 @@ export function AdminEventsScreen() {
   const listQuery = useAdminEvents(listFilters);
   const employers = useEmployers();
   const flow = useEventActionFlow();
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [selected, setSelected] = useState<ReadonlySet<string>>(EMPTY_IDS);
 
   const events = listQuery.data ?? EMPTY_EVENTS;
   const employerName = useMemo(() => new Map((employers.data ?? []).map((e) => [e.id, e.name])), [employers.data]);
@@ -43,9 +44,21 @@ export function AdminEventsScreen() {
     return counts;
   }, [countsQuery.data]);
 
-  // Ticks are matched against what is on screen, so approving an event — which drops it off the
-  // review queue — clears its own selection without any bookkeeping.
-  const selectedEvents = useMemo(() => events.filter((e) => selected.has(e.id)), [events, selected]);
+  // Leaving the queue drops the ticks, so nothing ever comes back pre-selected. React's
+  // "adjust state when something changes" pattern — a re-render, not an effect round trip.
+  const [ticksTab, setTicksTab] = useState<StatusTab>(state.status);
+  if (ticksTab !== state.status) {
+    setTicksTab(state.status);
+    setSelected(EMPTY_IDS);
+  }
+
+  // Ticks only exist on the review queue, so the bulk bar only ever counts rows that are on
+  // screen with a checkbox beside them. Matching against the listed events also means approving
+  // an event — which drops it off this tab — clears its own tick without any bookkeeping.
+  const selectedEvents = useMemo(
+    () => (state.status === "pending_review" ? events.filter((e) => selected.has(e.id)) : EMPTY_EVENTS),
+    [events, selected, state.status],
+  );
   const allSelected = events.length > 0 && selectedEvents.length === events.length;
 
   const selection: TableSelection | undefined = state.status === "pending_review"
@@ -83,6 +96,15 @@ export function AdminEventsScreen() {
           resultCount={listQuery.data ? events.length : undefined}
         />
 
+        {employers.isError ? (
+          <p className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border bg-warning-50 px-4 py-2 text-[13px] text-warning-700 sm:px-5">
+            <span>Organiser names didn&apos;t load, so that column is blank.</span>
+            <Button variant="ghost" size="sm" onClick={() => void employers.refetch()} loading={employers.isRefetching}>
+              <RefreshCw /> Try again
+            </Button>
+          </p>
+        ) : null}
+
         {listQuery.isPending ? (
           <EventsTableSkeleton />
         ) : listQuery.isError ? (
@@ -102,7 +124,7 @@ export function AdminEventsScreen() {
         ) : (
           <EventsTable
             events={events}
-            organizerName={(id) => employerName.get(id) ?? "Unknown organiser"}
+            organizerName={(id) => employerName.get(id) ?? (employers.isError ? "—" : "Unknown organiser")}
             onAction={(event, action) => flow.start([event], action)}
             onToggleFeatured={(event) => void flow.setFeatured(event, !event.featured)}
             pendingId={flow.pendingId}

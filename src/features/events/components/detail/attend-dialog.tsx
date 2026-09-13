@@ -86,6 +86,7 @@ export function AttendDialog({ open, onOpenChange, event, onAttended }: AttendDi
                       className={cn(
                         "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border-strong px-3 py-2.5 transition-colors",
                         "has-[:checked]:border-navy-900 has-[:checked]:bg-navy-50",
+                        "has-[:focus-visible]:border-navy-900 has-[:focus-visible]:shadow-focus",
                         t.soldOut && "pointer-events-none opacity-50",
                       )}
                     >

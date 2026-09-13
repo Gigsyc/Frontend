@@ -28,20 +28,36 @@ interface Props {
 export function EventsToolbar({ state, counts, onChange, onClear, activeCount, resultCount }: Props) {
   const [text, setText] = useState(state.q);
   const debounced = useDebouncedValue(text, 250);
+  /** The last search this box and the URL agreed on, so neither side echoes the other back. */
   const pushed = useRef(state.q);
+  const onChangeRef = useRef(onChange);
 
+  useEffect(() => { onChangeRef.current = onChange; });
+
+  // Typing → URL. Deliberately not keyed on `onChange`'s identity: it changes with every URL
+  // write, and re-running on that would push a half-settled search back over a fresh one.
   useEffect(() => {
     if (debounced === pushed.current) return;
     pushed.current = debounced;
-    onChange({ q: debounced });
-  }, [debounced, onChange]);
+    onChangeRef.current({ q: debounced });
+  }, [debounced]);
+
+  // URL → input, one way. The URL owns the filters, so "Clear filters" in the empty state, the
+  // sidebar's Events link and the back button all empty the box instead of leaving a stale word
+  // sitting above unfiltered results.
+  useEffect(() => {
+    if (state.q === pushed.current) return;
+    pushed.current = state.q;
+    setText(state.q);
+  }, [state.q]);
 
   return (
     <div className="flex flex-col gap-3 border-b border-border p-4 sm:p-5">
       <div className="scrollbar-none -mx-1 overflow-x-auto px-1 pb-0.5">
         <Segmented<StatusTab>
           ariaLabel="Filter events by status"
-          size="sm"
+          // The only way to the review queue on a phone: 44px there, dense on desktop.
+          className="[&>button]:h-11 sm:[&>button]:h-8"
           value={state.status}
           onChange={(status) => onChange({ status })}
           options={STATUS_TABS.map((t) => ({ ...t, count: counts?.[t.value] }))}

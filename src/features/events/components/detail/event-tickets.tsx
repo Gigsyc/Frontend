@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn, formatRwf, pluralize } from "@/lib/utils";
 import type { Event } from "@/types";
-import { cheapestTier, stagger } from "./utils";
+import { cheapestTier, isEventLive, stagger } from "./utils";
 
 /**
  * Ticket tiers as rows, cheapest first and visually primary — the entry price is the
@@ -16,7 +16,7 @@ export function EventTickets({ event }: { event: Event }) {
   if (event.attendanceMode !== "tickets" || event.tickets.length === 0) return null;
   const best = cheapestTier(event.tickets);
   const tiers = [...event.tickets].sort((a, b) => a.price - b.price);
-  const closed = event.status === "cancelled" || event.status === "completed";
+  const closed = !isEventLive(event);
 
   return (
     <section aria-labelledby="tickets-heading" className="space-y-4">
@@ -41,7 +41,7 @@ export function EventTickets({ event }: { event: Event }) {
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 text-[15px] font-semibold">
                       {tier.name}
-                      {primary ? <Badge tone="navy">Best value</Badge> : null}
+                      {primary ? <Badge tone="navy">Lowest price</Badge> : null}
                       {soldOut ? <Badge tone="danger">Sold out</Badge> : null}
                     </p>
                     {tier.description ? <p className="mt-0.5 text-[13px] text-fg-muted">{tier.description}</p> : null}

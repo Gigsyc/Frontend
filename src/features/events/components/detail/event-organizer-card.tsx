@@ -74,8 +74,9 @@ export function EventStaffedCard({ shiftIds }: { shiftIds: string[] }) {
 
   const shifts = [first.data, second.data].filter((s) => s !== undefined);
   const loading = first.isPending || (shiftIds.length > 1 && second.isPending);
-  const roles = Array.from(new Set(shifts.map((s) => ROLES[s.role].label)));
-  const workers = shifts.reduce((n, s) => n + s.workersNeeded, 0);
+  // Roles only, never a headcount: `workersNeeded` is how many positions are open on the
+  // shift, not how many people will be on the floor, and a shift can still be unfilled.
+  const roles = Array.from(new Set(shifts.map((s) => ROLES[s.role].short)));
 
   return (
     <Card className="flex items-start gap-3 bg-navy-50/60 p-4 shadow-none">
@@ -87,10 +88,7 @@ export function EventStaffedCard({ shiftIds }: { shiftIds: string[] }) {
         {loading ? (
           <Skeleton className="mt-1.5 h-3.5 w-56" />
         ) : roles.length > 0 ? (
-          <p className="mt-1 text-[13px] text-fg-muted">
-            {workers > 0 ? `${workers} verified staff on the door and floor: ` : "Verified staff on the door and floor: "}
-            {roles.join(", ").toLowerCase()}.
-          </p>
+          <p className="mt-1 text-[13px] text-fg-muted">Verified staff on this event: {roles.join(", ")}.</p>
         ) : (
           <p className="mt-1 text-[13px] text-fg-muted">Verified staff on the door and floor.</p>
         )}

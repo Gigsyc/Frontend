@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useEvents } from "../queries";
 import { eventMatchesWhen } from "@/data/events";
 
@@ -19,5 +19,8 @@ export function useUpcomingEvents(limit = 4) {
     return (week.length >= limit ? week : all).slice(0, limit);
   }, [query.data, limit]);
 
-  return { events, isPending: query.isPending, isError: query.isError };
+  const { refetch: refetchQuery } = query;
+  const refetch = useCallback(() => { void refetchQuery(); }, [refetchQuery]);
+
+  return { events, isPending: query.isPending, isError: query.isError, isRefetching: query.isRefetching, refetch };
 }

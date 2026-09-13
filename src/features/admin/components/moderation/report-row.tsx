@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "motion/react";
+import { motion, type MotionProps } from "motion/react";
 import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,11 +12,10 @@ import type { Outcome } from "./resolve-report-dialog";
 
 interface Props {
   report: Report;
-  index: number;
+  /** Entrance props from the list's `useStaggerOnce` — the list owns the stagger, not the row. */
+  animation: MotionProps;
   onAct: (report: Report, outcome: Outcome) => void;
 }
-
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 export const KIND_LABEL: Record<ReportKind, string> = {
   event: "Event",
@@ -25,24 +24,22 @@ export const KIND_LABEL: Record<ReportKind, string> = {
   profile: "Profile",
 };
 
-/** Only event and profile reports point at a record an operator can open from here. */
+/** Every kind but a review opens the record it is about; a review has no page of its own. */
 function targetHref(report: Report): string | undefined {
-  if (report.kind === "event") return `/admin/events/${report.targetId}`;
-  if (report.kind === "profile") return "/admin/users";
-  return undefined;
+  switch (report.kind) {
+    case "event": return `/admin/events/${report.targetId}`;
+    case "organizer": return "/admin/partners";
+    case "profile": return `/admin/users?q=${encodeURIComponent(report.targetLabel)}`;
+    default: return undefined;
+  }
 }
 
-export function ReportRow({ report, index, onAct }: Props) {
+export function ReportRow({ report, animation, onAct }: Props) {
   const href = targetHref(report);
   const open = report.status === "open";
 
   return (
-    <motion.li
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: EASE, delay: Math.min(index, 7) * 0.03 }}
-      className="p-4 sm:p-5"
-    >
+    <motion.li {...animation} className="p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <SeverityBadge severity={report.severity} />
         <Badge tone="outline">{KIND_LABEL[report.kind]}</Badge>

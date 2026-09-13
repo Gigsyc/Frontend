@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ErrorState } from "@/components/ui/empty-state";
 import { Photo } from "@/components/ui/photo";
 import { SectionHeading } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,11 +11,17 @@ import type { Destination, Event, RwandaPlace } from "@/types";
 interface BrowseByPlaceProps {
   destinations: Destination[] | undefined;
   events: Event[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+  isRefetching?: boolean;
+  onRetry: () => void;
+  /** Where picking a place goes — built by the board so the rest of the filters survive. */
+  hrefForPlace: (place: RwandaPlace) => string;
 }
 
 /** Places that actually have something on, busiest first. Picking one filters the board by place. */
-export function BrowseByPlace({ destinations, events }: BrowseByPlaceProps) {
-  if (!destinations || !events) {
+export function BrowseByPlace({ destinations, events, isPending, isError, isRefetching, onRetry, hrefForPlace }: BrowseByPlaceProps) {
+  if (isPending) {
     return (
       <section className="space-y-4" aria-busy="true" aria-label="Loading places">
         <div className="h-5 w-36 skeleton" aria-hidden />
@@ -24,6 +31,23 @@ export function BrowseByPlace({ destinations, events }: BrowseByPlaceProps) {
       </section>
     );
   }
+
+  if (isError) {
+    return (
+      <section aria-labelledby="places-heading" className="space-y-4">
+        <SectionHeading title={<span id="places-heading">Browse by place</span>} />
+        <ErrorState
+          title="We couldn't load places"
+          onRetry={onRetry}
+          retrying={isRefetching}
+          compact
+          className="rounded-lg bg-surface shadow-card"
+        />
+      </section>
+    );
+  }
+
+  if (!destinations || !events) return null;
 
   const counts = new Map<RwandaPlace, number>();
   for (const event of events) counts.set(event.place, (counts.get(event.place) ?? 0) + 1);
@@ -39,13 +63,15 @@ export function BrowseByPlace({ destinations, events }: BrowseByPlaceProps) {
     <section aria-labelledby="places-heading" className="space-y-4">
       <SectionHeading
         title={<span id="places-heading">Browse by place</span>}
-        description="Eight places we run events in, from the capital to the parks."
+        description={`Where events are on right now — ${pluralize(withEvents.length, "place")} with something coming up.`}
       />
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {withEvents.map(({ destination, count }) => (
           <li key={destination.id} className="flex">
             <Link
-              href={`/events?place=${encodeURIComponent(destination.name)}`}
+              href={hrefForPlace(destination.name)}
+              replace
+              scroll={false}
               className="group w-full overflow-hidden rounded-lg bg-surface text-left shadow-card transition-[box-shadow,transform] duration-200 ease-out-soft hover:-translate-y-px hover:shadow-raised focus-visible:outline-none focus-visible:shadow-focus"
             >
               <Photo

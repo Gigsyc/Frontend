@@ -82,7 +82,7 @@ export function PlatformTab() {
             )}
           </Field>
           <Field label="Timezone" hint="Every event time on GigSyc is Rwandan local time.">
-            {(p) => <Input {...p} value="Africa/Kigali" readOnly disabled />}
+            {(p) => <Input {...p} value="Africa/Kigali" readOnly aria-readonly="true" className="bg-ink-50 text-fg-muted" />}
           </Field>
         </CardContent>
         <CardFooter className="justify-end">

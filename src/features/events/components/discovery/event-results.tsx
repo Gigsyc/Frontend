@@ -10,7 +10,7 @@ import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { cn, pluralize } from "@/lib/utils";
 import type { Event } from "@/types";
-import { emptyResultLine, SORT_SUFFIX, type EventsFilterState } from "../../hooks";
+import { emptyResultLine, hasActiveFilters, SORT_SUFFIX, type EventsFilterState } from "../../hooks";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -38,20 +38,44 @@ export function EventResults(props: EventResultsProps) {
 
   if (isPending) return <ResultsSkeleton heading={heading} />;
 
-  if (isError || !events) {
-    return (
-      <ErrorState
-        title="We couldn't load events"
-        error={error}
-        onRetry={refetch}
-        retrying={isRefetching}
-        className="rounded-lg bg-surface shadow-card"
-      />
-    );
-  }
+  // The count line and its spinner sit above every outcome, so a filter change that refetches
+  // into zero results still shows that something is happening.
+  return (
+    <section aria-label={heading} className="space-y-4">
+      <p role="status" className="flex items-center gap-2 text-[13px] text-fg-muted">
+        {events ? (
+          <span><span className="font-medium text-fg tabular">{pluralize(events.length, "event")}</span>{saved ? "" : ` · ${SORT_SUFFIX[state.sort]}`}</span>
+        ) : null}
+        {isFetching ? <Spinner label="Updating events" /> : null}
+      </p>
 
-  if (events.length === 0) {
-    return saved ? (
+      {isError || !events ? (
+        <ErrorState
+          title="We couldn't load events"
+          error={error}
+          onRetry={refetch}
+          retrying={isRefetching}
+          className="rounded-lg bg-surface shadow-card"
+        />
+      ) : events.length === 0 ? (
+        <ResultsEmpty state={state} onClear={onClear} />
+      ) : (
+        <EventGrid
+          events={events}
+          isStale={isStale}
+          organizerName={props.organizerName}
+          isSaved={props.isSaved}
+          onToggleSave={props.onToggleSave}
+        />
+      )}
+    </section>
+  );
+}
+
+/** Three different nothings: nothing bookmarked, nothing matching, and nothing on at all. */
+function ResultsEmpty({ state, onClear }: Pick<EventResultsProps, "state" | "onClear">) {
+  if (state.view === "saved") {
+    return (
       <EmptyState
         icon={BookmarkX}
         title="Nothing saved yet"
@@ -59,31 +83,28 @@ export function EventResults(props: EventResultsProps) {
         action={<Button asChild><Link href="/events">Browse events</Link></Button>}
         className="rounded-lg bg-surface shadow-card"
       />
-    ) : (
+    );
+  }
+
+  if (!hasActiveFilters(state)) {
+    return (
       <EmptyState
         icon={CalendarSearch}
-        title={emptyResultLine(state)}
-        description="Try another date or explore all upcoming events."
-        action={<Button variant="outline" onClick={onClear}>Clear filters</Button>}
+        title="Nothing on right now"
+        description="New events are added every week. Check back soon."
         className="rounded-lg bg-surface shadow-card"
       />
     );
   }
 
   return (
-    <section aria-label={heading} className="space-y-4">
-      <p role="status" className="flex items-center gap-2 text-[13px] text-fg-muted">
-        <span><span className="font-medium text-fg tabular">{pluralize(events.length, "event")}</span>{saved ? "" : ` · ${SORT_SUFFIX[state.sort]}`}</span>
-        {isFetching ? <Spinner label="Updating events" /> : null}
-      </p>
-      <EventGrid
-        events={events}
-        isStale={isStale}
-        organizerName={props.organizerName}
-        isSaved={props.isSaved}
-        onToggleSave={props.onToggleSave}
-      />
-    </section>
+    <EmptyState
+      icon={CalendarSearch}
+      title={emptyResultLine(state)}
+      description="Try another date or explore all upcoming events."
+      action={<Button variant="outline" onClick={onClear}>Clear filters</Button>}
+      className="rounded-lg bg-surface shadow-card"
+    />
   );
 }
 

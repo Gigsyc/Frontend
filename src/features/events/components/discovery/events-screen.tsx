@@ -7,7 +7,9 @@ import { useEmployers } from "@/features/employers/queries";
 import { pluralize } from "@/lib/utils";
 import type { Event, EventFilters, RwandaPlace } from "@/types";
 import { useDestinations, useEvents } from "../../queries";
-import { hasActiveFilters, toEventFilters, useEventFilters, useSavedEvents, whenCounts } from "../../hooks";
+import {
+  hasActiveFilters, serializeEventParams, toEventFilters, toggleCategory, useEventFilters, useSavedEvents, whenCounts,
+} from "../../hooks";
 import { ActiveFilters } from "./active-filters";
 import { BrowseByPlace } from "./browse-by-place";
 import { CategoryRail } from "./category-rail";
@@ -17,8 +19,11 @@ import { EventsSearch } from "./events-search";
 import { FeaturedRail } from "./featured-rail";
 import { FilterBar } from "./filter-bar";
 
-/** Unfiltered baseline: the counts, the featured rail and the place grid all read from this one list. */
-const ALL_EVENTS: EventFilters = {};
+/**
+ * Unfiltered baseline: the featured rail, the place grid and the header line all read from this
+ * one list. It carries the default sort so it is the same cache entry as an unfiltered board.
+ */
+const ALL_EVENTS: EventFilters = { sort: "soonest" };
 
 /** "38 events across Kigali, Musanze, Rubavu and beyond." */
 function summarise(events: Event[]): string {
@@ -39,6 +44,9 @@ export function EventsScreen() {
 
   const all = useEvents(ALL_EVENTS);
   const results = useEvents(useMemo(() => toEventFilters(state), [state]));
+  // The date rail counts what the board would show if only the date changed, so the rail and the
+  // grid can never disagree. With no date picked this is the same query as `results`.
+  const countBase = useEvents(useMemo(() => toEventFilters({ ...state, when: "all" }), [state]));
   const employers = useEmployers();
   const destinations = useDestinations();
   const { savedIds, savedQuery, toggleSave } = useSavedEvents();
@@ -50,11 +58,18 @@ export function EventsScreen() {
   const organizerName = useCallback((event: Event) => organizerById.get(event.organizerId), [organizerById]);
   const isSaved = useCallback((event: Event) => savedIds.has(event.id), [savedIds]);
 
-  const counts = useMemo(() => whenCounts(all.data ?? []), [all.data]);
+  const counts = useMemo(() => whenCounts(countBase.data ?? []), [countBase.data]);
   const featured = useMemo(() => (all.data ?? []).filter((e) => e.featured).slice(0, 3), [all.data]);
   const bookmarked = useMemo(() => all.data?.filter((e) => savedIds.has(e.id)), [all.data, savedIds]);
+  // Bookmarks outlive the board: anything that has finished or been withdrawn is no longer in the
+  // public list, so say so rather than quietly showing a smaller number than the customer saved.
+  const hidden = bookmarked ? savedIds.size - bookmarked.length : 0;
 
   const filtersOn = hasActiveFilters(state);
+  const placeHref = useCallback(
+    (place: RwandaPlace) => `/events?${serializeEventParams({ ...state, place }).toString()}`,
+    [state],
+  );
   const shown = savedView
     ? {
       events: bookmarked,
@@ -95,10 +110,17 @@ export function EventsScreen() {
                 bookmarked ? `${pluralize(bookmarked.length, "event")} you've bookmarked.` : "Your bookmarked events."
               ) : all.data ? (
                 summarise(all.data)
+              ) : all.isError ? (
+                "Events across Rwanda."
               ) : (
                 <span className="inline-block h-4 w-64 max-w-full align-middle skeleton" aria-hidden />
               )}
             </p>
+            {savedView && hidden > 0 ? (
+              <p className="mt-1 text-[13px] text-fg-subtle">
+                {pluralize(hidden, "saved event")} {hidden === 1 ? "has" : "have"} finished or been withdrawn and {hidden === 1 ? "is" : "are"} not shown.
+              </p>
+            ) : null}
           </div>
           {!savedView ? (
             <EventsSearch
@@ -117,8 +139,12 @@ export function EventsScreen() {
             ) : null}
 
             <div className="space-y-3">
-              <DateRail value={state.when} onChange={(when) => update({ when })} counts={all.data ? counts : undefined} />
-              <CategoryRail selected={state.categories} onChange={(categories) => update({ categories })} />
+              <DateRail value={state.when} onChange={(when) => update({ when })} counts={countBase.data ? counts : undefined} />
+              <CategoryRail
+                selected={state.categories}
+                onToggle={(id) => update(toggleCategory(id))}
+                onClear={() => update({ categories: [] })}
+              />
               <FilterBar state={state} onChange={update} resultCount={results.data?.length} />
               <ActiveFilters state={state} onChange={update} onClear={clear} />
             </div>
@@ -141,7 +167,17 @@ export function EventsScreen() {
           onClear={clear}
         />
 
-        {!savedView && !filtersOn ? <BrowseByPlace destinations={destinations.data} events={all.data} /> : null}
+        {!savedView && !filtersOn ? (
+          <BrowseByPlace
+            destinations={destinations.data}
+            events={all.data}
+            isPending={destinations.isPending || all.isPending}
+            isError={destinations.isError || all.isError}
+            isRefetching={destinations.isRefetching || all.isRefetching}
+            onRetry={() => { void destinations.refetch(); void all.refetch(); }}
+            hrefForPlace={placeHref}
+          />
+        ) : null}
       </div>
     </div>
   );

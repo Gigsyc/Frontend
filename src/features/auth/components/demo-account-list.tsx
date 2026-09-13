@@ -6,10 +6,13 @@ import { Avatar, EmployerMark } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useEmployer } from "@/features/employers/queries";
+import { useStaggerOnce } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { DEMO_ACCOUNTS, type DemoAccount } from "../accounts";
 
 interface DemoAccountListProps {
+  /** Id of the visible label above the list — "Or continue as". */
+  labelledBy: string;
   /** Row highlighted by `?as=`, or the one the visitor just picked. */
   selectedId: string | null;
   /** Control currently signing in — an account id, or "form". */
@@ -19,16 +22,12 @@ interface DemoAccountListProps {
   className?: string;
 }
 
-export function DemoAccountList({ selectedId, pendingId, busy, onChoose, className }: DemoAccountListProps) {
+export function DemoAccountList({ labelledBy, selectedId, pendingId, busy, onChoose, className }: DemoAccountListProps) {
+  const stagger = useStaggerOnce(true);
   return (
-    <ul className={cn("flex flex-col gap-2", className)} aria-label="Demo accounts">
+    <ul className={cn("flex flex-col gap-2", className)} aria-labelledby={labelledBy}>
       {DEMO_ACCOUNTS.map((account, i) => (
-        <motion.li
-          key={account.id}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: Math.min(i, 7) * 0.03, ease: [0.22, 1, 0.36, 1] }}
-        >
+        <motion.li key={account.id} {...stagger(i)}>
           <AccountRow
             account={account}
             selected={selectedId === account.id}
@@ -57,7 +56,7 @@ function AccountRow({ account, selected, pending, disabled, onChoose }: AccountR
       type="button"
       onClick={() => onChoose(account)}
       disabled={disabled}
-      aria-current={selected ? "true" : undefined}
+      aria-pressed={selected}
       className={cn(
         "flex w-full items-center gap-3 rounded-md border p-2.5 text-left transition-[border-color,background-color,box-shadow] duration-150 disabled:opacity-55",
         selected

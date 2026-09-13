@@ -57,7 +57,7 @@ export function PrototypeTab() {
                 <DialogDescription>Anything published, verified, suspended or resolved in this session is discarded. This only affects your browser.</DialogDescription>
               </DialogHeader>
               <DialogBody className="text-sm leading-6 text-fg-muted">
-                The eight review-queue submissions come back, the two unverified partners go back to pending, and the four open reports reopen.
+                The eight review-queue submissions come back, the three unverified partners go back to pending, and the four open reports reopen.
               </DialogBody>
               <DialogFooter>
                 <DialogClose asChild><Button variant="ghost" disabled={resetting}>Keep my changes</Button></DialogClose>

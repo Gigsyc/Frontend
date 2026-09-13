@@ -1,9 +1,10 @@
 "use client";
 
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { useMemo } from "react";
 import { useAdminEvents, useAdminUsers, useReports, useSystemServices } from "@/features/admin/queries";
 import { useEmployers } from "@/features/employers/queries";
+import { isEventOver } from "@/lib/mock/store";
 import type { Employer, Event, EventStatus, PlatformRole, RwandaPlace } from "@/types";
 
 export type AttentionKind = "moderation" | "service" | "review_queue" | "partners" | "users";
@@ -23,7 +24,7 @@ export interface ActivityItem {
   kind: "review" | "user" | "report";
   lead: string;
   rest: string;
-  /** ISO date or timestamp — mixed precision, sorted as text. */
+  /** ISO timestamp, or a plain date when that is all the record carries. */
   at: string;
   href: string;
 }
@@ -67,8 +68,16 @@ const SERVICE_WORD = { degraded: "is degraded", down: "is down", maintenance: "i
 const EMPTY_EVENTS: Event[] = [];
 const EMPTY_EMPLOYERS: Employer[] = [];
 
-/** Events the public site is showing right now: published and not yet finished. */
-const isLive = (e: Event, today: string) => e.status === "published" && (e.endDate ?? e.date) >= today;
+/**
+ * Events the public site is showing right now. `isEventOver` is the store's own rule — it reads
+ * the event's end *time*, not just its date — so an event that finished at 14:00 today leaves
+ * this count at the same moment it leaves /events. Imported rather than restated: one rule, both
+ * sides. (Its long-term home is next to `isPubliclyReachable` in `@/data/events`.)
+ */
+const isLive = (e: Event) => e.status === "published" && !isEventOver(e);
+
+/** Sign-ups carry a date, reviews and reports a full timestamp — compare them as instants. */
+const instant = (item: ActivityItem) => +parseISO(item.at);
 
 /**
  * Everything /admin needs in one read. Composed from the existing admin and employer
@@ -100,8 +109,8 @@ export function useAdminOverview() {
     if (openReports > 0) {
       rows.push({
         id: "moderation", kind: "moderation", lead: String(openReports),
-        label: openReports === 1 ? "reported listing" : "reported listings",
-        detail: "Customers flagged these and nobody has decided yet.",
+        label: openReports === 1 ? "report waiting" : "reports waiting",
+        detail: "Customers flagged events, organisers and profiles and nobody has decided yet.",
         href: "/admin/moderation",
       });
     }
@@ -141,10 +150,9 @@ export function useAdminOverview() {
 
   const stats = useMemo<OverviewStats>(() => {
     const now = new Date();
-    const today = format(now, "yyyy-MM-dd");
     const month = format(now, "yyyy-MM");
     return {
-      liveEvents: events.filter((e) => isLive(e, today)).length,
+      liveEvents: events.filter(isLive).length,
       thisMonth: events.filter((e) => e.date.startsWith(month) && (e.status === "published" || e.status === "completed")).length,
       monthName: format(now, "MMMM"),
       activeUsers: users.filter((u) => u.status === "active").length,
@@ -159,10 +167,12 @@ export function useAdminOverview() {
     [events],
   );
 
-  const upcoming = useMemo(() => {
-    const today = format(new Date(), "yyyy-MM-dd");
-    return events.filter((e) => e.status === "published" && e.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
-  }, [events]);
+  // The same rule as the tile above it, so the two blocks can never disagree about one event:
+  // a festival that started yesterday and runs until Sunday is still on the public site.
+  const upcoming = useMemo(
+    () => events.filter(isLive).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5),
+    [events],
+  );
 
   const activity = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [];
@@ -171,7 +181,7 @@ export function useAdminOverview() {
     }
     for (const u of users) items.push({ id: `us_${u.id}`, kind: "user", lead: u.name, rest: ROLE_WORD[u.role], at: u.joinedAt, href: "/admin/users" });
     for (const r of reports) items.push({ id: `rp_${r.id}`, kind: "report", lead: r.targetLabel, rest: `was reported for ${r.reason.toLowerCase()}`, at: r.createdAt, href: "/admin/moderation" });
-    return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
+    return items.sort((a, b) => instant(b) - instant(a)).slice(0, 8);
   }, [events, reports, users]);
 
   const destinations = useMemo<DestinationShare[]>(() => {
@@ -183,11 +193,16 @@ export function useAdminOverview() {
   }, [events]);
 
   const queries = [eventsQuery, usersQuery, reportsQuery, servicesQuery, employersQuery];
+  // Only a query with nothing to show is fatal. The services poll runs every minute, so a single
+  // failed refresh must never replace a console that is already full of good numbers.
+  const fatal = queries.filter((q) => q.isError && q.data === undefined);
 
   return {
     isPending: queries.some((q) => q.isPending),
-    isError: queries.some((q) => q.isError),
-    error: queries.find((q) => q.isError)?.error,
+    isError: fatal.length > 0,
+    error: fatal[0]?.error,
+    /** A refresh failed somewhere, but every panel still holds its last good numbers. */
+    stale: queries.some((q) => q.isError && q.data !== undefined),
     isRefetching: queries.some((q) => q.isRefetching),
     refetch: () => { for (const q of queries) void q.refetch(); },
     attention,

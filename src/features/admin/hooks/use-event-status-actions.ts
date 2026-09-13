@@ -73,7 +73,9 @@ export function useEventStatusActions() {
       try {
         await featured.mutateAsync({ id: event.id, featured: next });
         toast.success(next ? "Featured" : "No longer featured", {
-          description: next ? `${event.title} is pinned to the top of /events.` : `${event.title} sits with everything else on /events.`,
+          description: next
+            ? `${event.title} can now lead the Featured rail on /events.`
+            : `${event.title} is no longer in the Featured rail.`,
         });
       } catch (err) {
         toast.error(errorMessage(err));

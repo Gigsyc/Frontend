@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EVENT_CATEGORIES, PLACES, WHEN_OPTIONS, type WhenValue } from "@/data/events";
 import type { EventCategory, EventFilters, RwandaPlace } from "@/types";
 
@@ -118,10 +118,28 @@ export function sheetFilterCount(s: EventsFilterState): number {
   return (s.place !== "all" ? 1 : 0) + (s.price !== "all" ? 1 : 0) + (s.sort !== "soonest" ? 1 : 0);
 }
 
+/**
+ * A patch is either the fields to set, or a function of the state it lands on. Anything derived
+ * from the current state — the category list, which is added to rather than replaced — must use
+ * the function form, or two quick toggles would each build on the same pre-toggle array.
+ */
+export type EventsFilterPatch =
+  | Partial<EventsFilterState>
+  | ((prev: EventsFilterState) => Partial<EventsFilterState>);
+
+/** Add or remove one category, against whatever the live state is when it applies. */
+export const toggleCategory =
+  (id: EventCategory) =>
+    (prev: EventsFilterState): Partial<EventsFilterState> => ({
+      categories: prev.categories.includes(id)
+        ? prev.categories.filter((c) => c !== id)
+        : [...prev.categories, id],
+    });
+
 export interface ActiveFilterChip {
   key: string;
   label: string;
-  patch: Partial<EventsFilterState>;
+  patch: EventsFilterPatch;
 }
 
 export function activeFilterChips(s: EventsFilterState): ActiveFilterChip[] {
@@ -132,20 +150,18 @@ export function activeFilterChips(s: EventsFilterState): ActiveFilterChip[] {
     chips.push({ key: "when", label, patch: { when: "all" } });
   }
   for (const c of s.categories) {
-    chips.push({ key: `cat-${c}`, label: EVENT_CATEGORIES[c].label, patch: { categories: s.categories.filter((x) => x !== c) } });
+    chips.push({ key: `cat-${c}`, label: EVENT_CATEGORIES[c].label, patch: toggleCategory(c) });
   }
   if (s.place !== "all") chips.push({ key: "place", label: s.place, patch: { place: "all" } });
   if (s.price !== "all") chips.push({ key: "price", label: s.price === "free" ? "Free" : "Paid", patch: { price: "all" } });
   return chips;
 }
 
-/** "No free events in Musanze this weekend." — the empty state names what was asked for. */
+/** "No free music events in Musanze this weekend." — the empty state names what was asked for. */
 export function emptyResultLine(s: EventsFilterState): string {
-  const subject =
-    s.price === "free" ? "free events"
-      : s.price === "paid" ? "paid events"
-        : s.categories.length === 1 ? `${EVENT_CATEGORIES[s.categories[0]].label.toLowerCase()} events`
-          : "events";
+  const price = s.price === "free" ? "free" : s.price === "paid" ? "paid" : "";
+  const category = s.categories.length === 1 ? EVENT_CATEGORIES[s.categories[0]].label.toLowerCase() : "";
+  const subject = [price, category, "events"].filter(Boolean).join(" ");
   const query = s.query.trim() ? ` matching "${s.query.trim()}"` : "";
   const place = s.place !== "all" ? ` in ${s.place}` : "";
   return `No ${subject}${query}${place}${WHEN_PHRASE[s.when]}.`;
@@ -163,20 +179,48 @@ export function useEventFilters() {
 
   const state = useMemo(() => parseEventParams(searchParams), [searchParams]);
 
+  // `state` only catches up once the replace has committed, so two chip toggles in quick
+  // succession would both build on the pre-first-toggle URL and the first would be lost.
+  // `latest` is the newest intent: writes update it immediately, and an incoming URL we did
+  // not write ourselves (back/forward, a deep link, a Link elsewhere on the page) replaces it.
+  const latest = useRef(state);
+  const inFlight = useRef<string[]>([]);
+
+  useEffect(() => {
+    const qs = serializeEventParams(state).toString();
+    const i = inFlight.current.indexOf(qs);
+    if (i === -1) {
+      inFlight.current = [];
+      latest.current = state;
+    } else {
+      inFlight.current = inFlight.current.slice(i + 1);
+    }
+  }, [state]);
+
   const replace = useCallback(
     (next: EventsFilterState) => {
       const qs = serializeEventParams(next).toString();
+      const current = inFlight.current.at(-1) ?? serializeEventParams(latest.current).toString();
+      latest.current = next;
+      if (qs === current) return;
+      inFlight.current = [...inFlight.current, qs];
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [router, pathname],
   );
 
-  const update = useCallback((patch: Partial<EventsFilterState>) => replace({ ...state, ...patch }), [replace, state]);
+  const update = useCallback(
+    (patch: EventsFilterPatch) => {
+      const base = latest.current;
+      replace({ ...base, ...(typeof patch === "function" ? patch(base) : patch) });
+    },
+    [replace],
+  );
 
   const clear = useCallback(() => {
-    replace({ ...DEFAULT_EVENTS_STATE, view: state.view });
+    replace({ ...DEFAULT_EVENTS_STATE, view: latest.current.view });
     setResetCount((c) => c + 1);
-  }, [replace, state.view]);
+  }, [replace]);
 
   return { state, update, clear, resetCount };
 }

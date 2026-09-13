@@ -4,7 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { CheckboxField } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -26,26 +26,33 @@ interface LoginFormProps {
   className?: string;
 }
 
-/** Errors appear on submit, then re-check on blur — never while the visitor is still typing. */
+/**
+ * Errors appear on submit, then re-check on blur — never while the visitor is still typing.
+ * `validated` holds the exact text each message was written about, so a message disappears
+ * as soon as its value changes: a correction being typed, or an account picked from the
+ * list below, which fills the email field from outside this component.
+ */
 export function LoginForm({ email, onEmail, onSubmit, pending, disabled, className }: LoginFormProps) {
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(true);
   const [submitted, setSubmitted] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [validated, setValidated] = useState<{ email?: string; password?: string }>({});
+
+  const emailError = validated.email === email ? emailErrorFor(email) : undefined;
+  const passwordError = validated.password === password ? passwordErrorFor(password) : undefined;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitted(true);
-    const next = { email: emailErrorFor(email), password: passwordErrorFor(password) };
-    setErrors(next);
-    if (next.email || next.password) return;
+    setValidated({ email, password });
+    if (emailErrorFor(email) || passwordErrorFor(password)) return;
     onSubmit();
   };
 
   return (
     <form onSubmit={submit} noValidate className={cn("flex flex-col gap-4", className)}>
-      <Field label="Email" error={errors.email}>
+      <Field label="Email" error={emailError}>
         {(p) => (
           <Input
             {...p}
@@ -55,13 +62,13 @@ export function LoginForm({ email, onEmail, onSubmit, pending, disabled, classNa
             placeholder="you@example.rw"
             value={email}
             onChange={(e) => onEmail(e.target.value)}
-            onBlur={() => { if (submitted) setErrors((prev) => ({ ...prev, email: emailErrorFor(email) })); }}
+            onBlur={() => { if (submitted) setValidated((prev) => ({ ...prev, email })); }}
             className="h-11"
           />
         )}
       </Field>
 
-      <Field label="Password" error={errors.password}>
+      <Field label="Password" error={passwordError}>
         {(p) => (
           <Input
             {...p}
@@ -70,15 +77,15 @@ export function LoginForm({ email, onEmail, onSubmit, pending, disabled, classNa
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onBlur={() => { if (submitted) setErrors((prev) => ({ ...prev, password: passwordErrorFor(password) })); }}
-            className="h-11 pr-12"
+            onBlur={() => { if (submitted) setValidated((prev) => ({ ...prev, password })); }}
+            className="h-11 pr-14"
             trailing={
               <button
                 type="button"
                 onClick={() => setShow((v) => !v)}
                 aria-label={show ? "Hide password" : "Show password"}
                 aria-pressed={show}
-                className="inline-flex size-9 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-ink-100 hover:text-fg"
+                className="inline-flex size-11 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-ink-100 hover:text-fg"
               >
                 {show ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
               </button>
@@ -88,14 +95,16 @@ export function LoginForm({ email, onEmail, onSubmit, pending, disabled, classNa
       </Field>
 
       <div className="flex items-center justify-between gap-3">
-        <label className="inline-flex cursor-pointer items-center gap-2.5 py-2 text-sm text-fg">
-          <Checkbox checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
-          Remember me
-        </label>
+        <CheckboxField
+          label="Remember me"
+          checked={remember}
+          onCheckedChange={(v) => setRemember(v === true)}
+          className="min-h-11 items-center"
+        />
         <a
           href="#"
           onClick={(e) => { e.preventDefault(); toast("Password recovery is not part of the prototype."); }}
-          className="py-2 text-sm font-medium text-navy-700 underline-offset-4 hover:underline"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-navy-700 underline-offset-4 hover:underline"
         >
           Forgot password?
         </a>

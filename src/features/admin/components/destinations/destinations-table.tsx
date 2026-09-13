@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch, SwitchField } from "@/components/ui/checkbox";
 import { Photo } from "@/components/ui/photo";
+import { useStaggerOnce } from "@/lib/motion";
 import { pluralize } from "@/lib/utils";
 import type { Destination } from "@/types";
 
@@ -13,25 +14,30 @@ export type DestinationFlag = "featured" | "published";
 interface Props {
   destinations: Destination[];
   publishedEvents: Record<string, number>;
+  /** True when the events query failed: show "unknown", never an invented zero. */
+  countsUnavailable?: boolean;
   pendingKey: string | null;
   onToggle: (destination: Destination, flag: DestinationFlag, value: boolean) => void;
   onEdit: (destination: Destination) => void;
 }
 
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const rowIn = (i: number) => ({
-  initial: { opacity: 0, y: 6 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3, ease: EASE, delay: Math.min(i, 7) * 0.03 },
-});
-
-const eventsLabel = (n: number) => (n === 0 ? "None live" : pluralize(n, "event"));
+/** Nothing on the public site reads `featured` yet, so the description says what it really is. */
+const FEATURED_HINT = "An internal mark. The public places row is ordered by how many events are on.";
 
 function Thumb({ destination }: { destination: Destination }) {
   return <Photo src={destination.heroImage} alt="" aspect="square" tint={false} sizes="40px" className="size-10 shrink-0 rounded-md" />;
 }
 
-export function DestinationsTable({ destinations, publishedEvents, pendingKey, onToggle, onEdit }: Props) {
+function EventsCount({ count, unavailable }: { count: number; unavailable?: boolean }) {
+  if (unavailable) {
+    return <span className="text-fg-subtle">—<span className="sr-only">live event count unavailable</span></span>;
+  }
+  return <>{count === 0 ? "None live" : pluralize(count, "event")}</>;
+}
+
+export function DestinationsTable({ destinations, publishedEvents, countsUnavailable, pendingKey, onToggle, onEdit }: Props) {
+  const stagger = useStaggerOnce(destinations.length > 0);
+
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
@@ -48,7 +54,7 @@ export function DestinationsTable({ destinations, publishedEvents, pendingKey, o
           </thead>
           <tbody>
             {destinations.map((d, i) => (
-              <motion.tr key={d.id} {...rowIn(i)} className="border-b border-border last:border-0 hover:bg-ink-50">
+              <motion.tr key={d.id} {...stagger(i)} className="border-b border-border last:border-0 hover:bg-ink-50">
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-3">
                     <Thumb destination={d} />
@@ -62,13 +68,15 @@ export function DestinationsTable({ destinations, publishedEvents, pendingKey, o
                   {d.region}
                   {d.travelFromKigali ? <span className="block text-xs text-fg-subtle">{d.travelFromKigali}</span> : null}
                 </td>
-                <td className="whitespace-nowrap px-5 py-3.5 tabular text-fg">{eventsLabel(publishedEvents[d.name] ?? 0)}</td>
+                <td className="whitespace-nowrap px-5 py-3.5 tabular text-fg">
+                  <EventsCount count={publishedEvents[d.name] ?? 0} unavailable={countsUnavailable} />
+                </td>
                 <td className="px-5 py-3.5">
                   <Switch
                     checked={d.featured}
                     disabled={pendingKey === `${d.id}:featured`}
                     onCheckedChange={(v) => onToggle(d, "featured", v)}
-                    aria-label={`Feature ${d.name} on the public site`}
+                    aria-label={`Mark ${d.name} as featured`}
                   />
                 </td>
                 <td className="px-5 py-3.5">
@@ -90,18 +98,20 @@ export function DestinationsTable({ destinations, publishedEvents, pendingKey, o
 
       <ul className="divide-y divide-border md:hidden">
         {destinations.map((d, i) => (
-          <motion.li key={d.id} {...rowIn(i)} className="flex flex-col gap-3 p-4">
+          <motion.li key={d.id} {...stagger(i)} className="flex flex-col gap-3 p-4">
             <div className="flex items-start gap-3">
               <Thumb destination={d} />
               <div className="min-w-0 flex-1">
                 <p className="font-medium leading-5 text-fg">{d.name}</p>
                 <p className="mt-0.5 text-[13px] text-fg-muted">{d.tagline}</p>
-                <p className="mt-1 text-xs text-fg-subtle">{d.region} · {eventsLabel(publishedEvents[d.name] ?? 0)}</p>
+                <p className="mt-1 text-xs text-fg-subtle">
+                  {d.region} · <EventsCount count={publishedEvents[d.name] ?? 0} unavailable={countsUnavailable} />
+                </p>
               </div>
             </div>
             <SwitchField
               label="Featured"
-              description="Shows first on the public places row."
+              description={FEATURED_HINT}
               checked={d.featured}
               disabled={pendingKey === `${d.id}:featured`}
               onCheckedChange={(v) => onToggle(d, "featured", v)}

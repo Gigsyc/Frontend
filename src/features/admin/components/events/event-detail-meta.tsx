@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { ExternalLink, ShieldAlert, ShieldCheck } from "lucide-react";
 import { eventDateLabel } from "@/components/common";
 import { Card, DataList, EventStatusBadge } from "@/components/ui";
-import { EVENT_CATEGORIES, EVENT_STATUS_LABEL } from "@/data/events";
+import { EVENT_CATEGORIES, EVENT_STATUS_LABEL, isPubliclyReachable } from "@/data/events";
 import { cn, formatDate, formatTimeAgo, formatTimeRange, pluralize } from "@/lib/utils";
 import type { AttendanceMode, Employer, Event } from "@/types";
 import { FeaturedToggle } from "./event-featured-toggle";
@@ -39,7 +39,10 @@ interface Props {
 
 /** Everything about the record rather than the event: who sent it, when, and where it points. */
 export function EventMetaCard({ event, organizer, onToggleFeatured, featuredBusy }: Props) {
-  const published = event.status === "published";
+  // What /events/[slug] actually serves: published, plus completed and cancelled, which stay
+  // reachable by direct link so a ticket holder finds out why the event is no longer on.
+  const reachable = isPubliclyReachable(event.status);
+  const statusWord = EVENT_STATUS_LABEL[event.status].toLowerCase();
 
   const items: Array<{ label: string; value: ReactNode }> = [
     { label: "Status", value: <EventStatusBadge status={event.status} /> },
@@ -69,12 +72,17 @@ export function EventMetaCard({ event, organizer, onToggleFeatured, featuredBusy
 
   items.push({
     label: "Public URL",
-    value: published ? (
-      <Link href={`/events/${event.slug}`} className="break-all font-medium text-navy-700 hover:text-navy-900 hover:underline">
-        /events/{event.slug}
-      </Link>
+    value: reachable ? (
+      <span className="flex flex-col gap-0.5">
+        <Link href={`/events/${event.slug}`} className="break-all font-medium text-navy-700 hover:text-navy-900 hover:underline">
+          /events/{event.slug}
+        </Link>
+        {event.status === "published" ? null : (
+          <span className="text-xs text-fg-muted">Reachable by direct link only — it has left the public listings.</span>
+        )}
+      </span>
     ) : (
-      <span className="text-fg-muted">Not on the public site while it is {EVENT_STATUS_LABEL[event.status].toLowerCase()}</span>
+      <span className="text-fg-muted">Not on the public site while it is {statusWord}</span>
     ),
   });
 
@@ -91,13 +99,13 @@ export function EventMetaCard({ event, organizer, onToggleFeatured, featuredBusy
         <FeaturedToggle event={event} onToggle={onToggleFeatured} busy={featuredBusy} className="size-11 sm:size-8" />
       </div>
 
-      {published ? (
+      {reachable ? (
         <Link
           href={`/events/${event.slug}`}
           className="flex min-h-11 items-center justify-between gap-2 rounded-md bg-navy-50 px-3 text-sm font-medium text-navy-900 transition-colors hover:bg-navy-100"
         >
-          What the customer sees
-          <ExternalLink className="size-4" aria-hidden />
+          {event.status === "published" ? "What the customer sees" : `What the customer sees (marked ${statusWord})`}
+          <ExternalLink className="size-4 shrink-0" aria-hidden />
         </Link>
       ) : null}
     </Card>

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { LoginScreen } from "@/features/auth/components/login-screen";
 
 export const metadata: Metadata = {
@@ -7,10 +6,11 @@ export const metadata: Metadata = {
   description: "Sign in to GigSyc to discover events, manage your team or run the platform.",
 };
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="min-h-dvh bg-canvas" aria-busy />}>
-      <LoginScreen />
-    </Suspense>
-  );
+/**
+ * `?as=` is read here rather than through `useSearchParams` so the whole split screen —
+ * photograph, heading, form — renders on the server instead of behind a blank boundary.
+ */
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const { as } = await searchParams;
+  return <LoginScreen hint={typeof as === "string" ? as : undefined} />;
 }

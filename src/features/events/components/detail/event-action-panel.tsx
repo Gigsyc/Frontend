@@ -2,13 +2,13 @@
 
 import { Bookmark, Check, Share2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import { eventDateLabel, eventPriceLabel } from "@/components/common";
+import { eventDateLabel, eventPriceLabel, isEventFree } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn, formatNumber, formatTimeRange } from "@/lib/utils";
 import type { Event } from "@/types";
-import { PRIMARY_ACTION_LABEL, fillPercent, spotsLeft } from "./utils";
+import { PRIMARY_ACTION_LABEL, fillPercent, isEventLive, spotsLeft } from "./utils";
 
 export interface ActionProps {
   event: Event;
@@ -48,11 +48,12 @@ function PriceHeadline({ event }: { event: Event }) {
   );
 }
 
-function AttendanceLine({ event }: { event: Event }) {
+/** How full the event is. Rendered in the page flow on small screens, in the rail on large ones. */
+export function AttendanceLine({ event, className }: { event: Event; className?: string }) {
   const left = spotsLeft(event);
   const pct = fillPercent(event);
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", className)}>
       <p className="text-[13px] text-fg-muted">
         <span className="font-medium text-fg tabular">{formatNumber(event.attending)}</span> going
         <span className="mx-1.5 text-fg-subtle" aria-hidden>·</span>
@@ -68,20 +69,26 @@ function AttendanceLine({ event }: { event: Event }) {
   );
 }
 
-/** Cancelled and completed events stay reachable by link, so they must explain themselves. */
-function StatusNotice({ event }: { event: Event }) {
+/**
+ * Cancelled and finished events stay reachable by link, so they must explain themselves —
+ * in the page flow, at every width, since the action rail only exists on large screens.
+ */
+export function EventStatusNotice({ event, className }: { event: Event; className?: string }) {
   if (event.status === "cancelled") {
+    const fallback = isEventFree(event)
+      ? "The organiser cancelled this event."
+      : "The organiser cancelled this event. Anyone who paid will be refunded.";
     return (
-      <div className="rounded-md bg-danger-50 p-3 text-[13px] text-danger-700">
+      <div className={cn("rounded-md bg-danger-50 p-3 text-[13px] text-danger-700", className)}>
         <p className="flex items-center gap-1.5 font-semibold">
           <TriangleAlert className="size-4 shrink-0" aria-hidden /> This event was cancelled
         </p>
-        <p className="mt-1 text-danger-700/90">{event.reviewNote ?? "The organiser called it off. Anyone who paid has been refunded."}</p>
+        <p className="mt-1 text-danger-700/90">{event.reviewNote ?? fallback}</p>
       </div>
     );
   }
   return (
-    <div className="rounded-md bg-ink-100 p-3 text-[13px] text-fg-muted">
+    <div className={cn("rounded-md bg-ink-100 p-3 text-[13px] text-fg-muted", className)}>
       <p className="font-semibold text-fg">This event has finished</p>
       <p className="mt-1">It ran on {eventDateLabel(event)}. Have a look at what is coming up below.</p>
     </div>
@@ -89,9 +96,14 @@ function StatusNotice({ event }: { event: Event }) {
 }
 
 function PrimaryAction({ event, attended, onAttend, size = "lg", className }: Pick<ActionProps, "event" | "attended" | "onAttend"> & { size?: "md" | "lg"; className?: string }) {
-  const closed = event.status !== "published";
-  if (closed) {
-    return <Button size={size} className={className} disabled>{PRIMARY_ACTION_LABEL[event.attendanceMode]}</Button>;
+  if (!isEventLive(event)) {
+    // Never leave "Get tickets" greyed out on an event that will not happen — that reads as
+    // a temporary outage. The button states the permanent fact instead.
+    return (
+      <Button size={size} className={className} disabled>
+        {event.status === "cancelled" ? "Event cancelled" : "Event finished"}
+      </Button>
+    );
   }
   if (attended) {
     return (
@@ -119,7 +131,7 @@ export function EventSecondaryActions({ event, saved, savePending, onToggleSave,
 /** Desktop rail: price, when, how full, then the one thing to do next. */
 export function EventActionCard(props: ActionProps) {
   const { event, attended, onAttend } = props;
-  const live = event.status === "published";
+  const live = isEventLive(event);
   return (
     <Card className="space-y-4 p-5">
       <PriceHeadline event={event} />
@@ -129,7 +141,8 @@ export function EventActionCard(props: ActionProps) {
         <span className="tabular">{formatTimeRange(event.startTime, event.endTime)}</span>
       </p>
 
-      {live ? <AttendanceLine event={event} /> : <StatusNotice event={event} />}
+      {/* The closed-event notice sits in the page flow above, so the rail does not repeat it. */}
+      {live ? <AttendanceLine event={event} /> : null}
 
       <div className="space-y-2">
         <PrimaryAction event={event} attended={attended} onAttend={onAttend} className="w-full" />
@@ -153,6 +166,7 @@ export function EventActionCard(props: ActionProps) {
 export function EventActionBar({ event, attended, onAttend }: Pick<ActionProps, "event" | "attended" | "onAttend">) {
   const label = eventPriceLabel(event);
   const free = label === "Free";
+  const live = isEventLive(event);
   return (
     <div className="sticky bottom-0 z-30 -mx-4 mt-2 border-t border-border bg-surface/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6 lg:hidden">
       <div className="mx-auto flex max-w-3xl items-center gap-3">
@@ -163,7 +177,7 @@ export function EventActionBar({ event, attended, onAttend }: Pick<ActionProps, 
           <p className={cn("mt-1 truncate text-xs", event.status === "cancelled" ? "text-danger-700" : "text-fg-muted")}>
             {event.status === "cancelled"
               ? "This event was cancelled"
-              : event.status === "completed"
+              : !live
                 ? "This event has finished"
                 : attended
                   ? `You're going · ${eventDateLabel(event)}`

@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Segmented } from "@/components/ui/tabs";
 import { useReports } from "@/features/admin";
+import { useStaggerOnce } from "@/lib/motion";
 import { pluralize } from "@/lib/utils";
 import type { Report, ReportStatus } from "@/types";
 import { ReportRow } from "./report-row";
@@ -62,6 +63,7 @@ export function ModerationScreen() {
   // The store already sorts newest first; filtering keeps that order.
   const rows = useMemo(() => all.filter((r) => r.status === tab), [all, tab]);
   const empty = EMPTY[tab];
+  const stagger = useStaggerOnce(rows.length > 0);
 
   return (
     <div className="space-y-6">
@@ -76,12 +78,13 @@ export function ModerationScreen() {
         }
       />
 
+      {/* Counts only once the data is in — three zeros beside an error panel would be a guess. */}
       <div className="-mx-4 overflow-x-auto px-4 scrollbar-none sm:mx-0 sm:px-0">
         <Segmented
           ariaLabel="Report status"
           value={tab}
           onChange={setTab}
-          options={TABS.map((t) => ({ value: t, label: LABEL[t], count: counts[t] }))}
+          options={TABS.map((t) => ({ value: t, label: LABEL[t], count: reports.isSuccess ? counts[t] : undefined }))}
         />
       </div>
 
@@ -95,7 +98,7 @@ export function ModerationScreen() {
         ) : (
           <ul className="divide-y divide-border">
             {rows.map((report, i) => (
-              <ReportRow key={report.id} report={report} index={i} onAct={(r, outcome) => setTarget({ report: r, outcome })} />
+              <ReportRow key={report.id} report={report} animation={stagger(i)} onAct={(r, outcome) => setTarget({ report: r, outcome })} />
             ))}
           </ul>
         )}

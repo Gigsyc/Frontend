@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ServiceStatusBadge } from "@/components/ui/status-badge";
 import { useSystemServices } from "@/features/admin";
-import { formatDayShort, formatTimeAgo } from "@/lib/utils";
+import { formatDayShort, formatTimeAgo, pluralize } from "@/lib/utils";
 import { ServicesTable } from "./services-table";
 import { StatusBanner } from "./status-banner";
 
@@ -46,7 +46,14 @@ export function SystemScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="System" description="How GigSyc itself is running: the six services behind the public site and both consoles." />
+      <PageHeader
+        title="System"
+        description={
+          list.length > 0
+            ? `How GigSyc itself is running: the ${pluralize(list.length, "service")} behind the public site and both consoles.`
+            : "How GigSyc itself is running."
+        }
+      />
 
       {services.isPending ? (
         <SystemSkeleton />

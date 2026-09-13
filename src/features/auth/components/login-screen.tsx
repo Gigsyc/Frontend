@@ -2,7 +2,6 @@
 
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/brand";
 import { accountForEmail, accountForHint, FALLBACK_ACCOUNT, type DemoAccount } from "../accounts";
@@ -11,14 +10,26 @@ import { DemoAccountList } from "./demo-account-list";
 import { LoginAside } from "./login-aside";
 import { LoginForm } from "./login-form";
 
+/** Names the account list for screen readers with the same words the divider shows. */
+const CONTINUE_AS_ID = "login-continue-as";
+
+interface LoginScreenProps {
+  /** `?as=` from the marketing call to action — "worker", "employer", "organizer", "admin". */
+  hint?: string;
+}
+
 /** /login — photograph on the left, one form on the right, no site chrome. */
-export function LoginScreen() {
-  const hinted = accountForHint(useSearchParams().get("as"));
+export function LoginScreen({ hint }: LoginScreenProps) {
+  const hinted = accountForHint(hint);
   const [picked, setPicked] = useState<DemoAccount | null>(null);
-  const [email, setEmail] = useState("");
+  /** Arriving from "Find shifts" or "Post a shift" fills in the person that button meant. */
+  const [email, setEmail] = useState(() => hinted?.email ?? "");
   const { enter, pendingId, busy } = useSignIn();
 
-  const selectedId = picked?.id ?? hinted?.id ?? null;
+  const typed = accountForEmail(email);
+  /** What "Sign in" will do: a matching email first, then the surface the visitor came from. */
+  const formAccount = typed ?? hinted ?? FALLBACK_ACCOUNT;
+  const selectedId = picked?.id ?? typed?.id ?? hinted?.id ?? null;
 
   const choose = (account: DemoAccount) => {
     setPicked(account);
@@ -26,12 +37,9 @@ export function LoginScreen() {
     enter(account, account.id);
   };
 
-  /** A typed email that matches a demo account enters as that person; anything else explores. */
   const submit = () => {
-    const account = accountForEmail(email) ?? FALLBACK_ACCOUNT;
-    if (!account) return;
-    setPicked(account);
-    enter(account, "form");
+    setPicked(formAccount);
+    enter(formAccount, "form");
   };
 
   return (
@@ -39,13 +47,13 @@ export function LoginScreen() {
       <LoginAside />
 
       <main id="main" className="flex min-h-dvh w-full flex-col px-5 pb-8 pt-6 sm:px-8 lg:w-[48%] lg:px-12 lg:pb-10">
-        <div className="flex items-center justify-between gap-4">
+        <div className="mx-auto flex w-full max-w-[400px] items-center justify-between gap-4">
           <Link href="/" aria-label="GigSyc home" className="rounded-sm lg:hidden">
             <Logo size="md" />
           </Link>
           <Link
             href="/"
-            className="ml-auto inline-flex h-11 items-center gap-1.5 text-[13px] font-medium text-fg-muted transition-colors hover:text-fg"
+            className="inline-flex h-11 items-center gap-1.5 text-[13px] font-medium text-fg-muted transition-colors hover:text-fg"
           >
             <ArrowLeft className="size-4" aria-hidden /> Back to the website
           </Link>
@@ -69,12 +77,13 @@ export function LoginScreen() {
 
             <div className="mt-8 flex items-center gap-3">
               <span className="h-px flex-1 bg-border" aria-hidden />
-              <span className="text-xs text-fg-subtle">Or continue as</span>
+              <span id={CONTINUE_AS_ID} className="text-xs text-fg-subtle">Or continue as</span>
               <span className="h-px flex-1 bg-border" aria-hidden />
             </div>
 
             <DemoAccountList
               className="mt-5"
+              labelledBy={CONTINUE_AS_ID}
               selectedId={selectedId}
               pendingId={pendingId}
               busy={busy}

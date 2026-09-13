@@ -16,13 +16,12 @@ export function LoginAside() {
         alt=""
         aspect="auto"
         rounded={false}
-        tint={false}
         priority
         sizes="(min-width: 1024px) 52vw, 1px"
         className="absolute inset-0 size-full"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-navy-950/85 via-navy-950/35 to-navy-950/15" aria-hidden />
-      <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-navy-950/55 to-transparent" aria-hidden />
+      {/* The one sanctioned scrim, carrying the quote. The top of the frame is already dark. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-navy-950/70 to-transparent" aria-hidden />
 
       <div className="relative flex h-full flex-col justify-between p-10 xl:p-14">
         <Link href="/" aria-label="GigSyc home" className="self-start rounded-sm">

@@ -23,6 +23,8 @@ const MIN_REASON = 10;
 export function useEventActionFlow() {
   const actions = useEventStatusActions();
   const [pending, setPending] = useState<PendingAction | null>(null);
+  /** The action that ran without a dialog, so the button that was pressed is the one that spins. */
+  const [runningActionId, setRunningActionId] = useState<string | null>(null);
 
   const start = useCallback(
     (events: Event[], action: EventActionDef, alwaysConfirm = false) => {
@@ -31,7 +33,8 @@ export function useEventActionFlow() {
         setPending({ events, action });
         return;
       }
-      void actions.setStatus(events[0], action.status);
+      setRunningActionId(action.id);
+      void actions.setStatus(events[0], action.status).finally(() => setRunningActionId(null));
     },
     [actions],
   );
@@ -51,6 +54,7 @@ export function useEventActionFlow() {
 
   return {
     pending, start, cancel, confirm,
+    runningActionId,
     setFeatured: actions.setFeatured,
     isPending: actions.isPending,
     pendingId: actions.pendingId,
@@ -98,7 +102,7 @@ function RejectDialog({ pending, onConfirm, busy }: { pending: PendingAction; on
   };
 
   return (
-    <DialogContent size="md" aria-describedby={undefined}>
+    <DialogContent size="md">
       <DialogHeader>
         <DialogTitle>{many ? `Reject ${pluralize(pending.events.length, "event")}?` : `Reject ${pending.events[0].title}?`}</DialogTitle>
         <DialogDescription>

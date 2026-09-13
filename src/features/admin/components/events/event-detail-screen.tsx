@@ -55,7 +55,15 @@ export function AdminEventScreen({ id }: { id: string }) {
         eyebrow={organizer.data ? organizer.data.name : <span className="skeleton inline-block h-3.5 w-32 align-middle" aria-hidden />}
         title={event.title}
         actions={actions.map((a) => (
-          <Button key={a.id} variant={variantFor(a)} onClick={() => flow.start([event], a)} disabled={flow.isPending}>
+          // Approve, Publish, Archive and Move back to review fire without a dialog, so the
+          // pressed button carries the spinner and its siblings just go quiet.
+          <Button
+            key={a.id}
+            variant={variantFor(a)}
+            onClick={() => flow.start([event], a)}
+            loading={flow.runningActionId === a.id}
+            disabled={flow.isPending}
+          >
             <a.icon /> {a.label}
           </Button>
         ))}

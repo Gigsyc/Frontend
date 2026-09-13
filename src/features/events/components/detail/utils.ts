@@ -1,4 +1,4 @@
-import { format, parseISO } from "date-fns";
+import { format, isBefore, parseISO } from "date-fns";
 import type { Transition } from "motion/react";
 import { formatDayLong, shiftHours } from "@/lib/utils";
 import type { AttendanceMode, Event, TicketTier } from "@/types";
@@ -31,6 +31,23 @@ export function mapsUrl(event: Pick<Event, "address" | "place">): string {
 /** House list stagger: 30ms apart, capped at eight items so long lists never crawl. */
 export function stagger(index: number): Transition {
   return { duration: 0.3, delay: Math.min(index, 7) * 0.03, ease: [0.22, 1, 0.36, 1] };
+}
+
+/**
+ * True once the event's last day has ended. Public event *lists* already drop finished
+ * events, but a detail page stays reachable by link, so the page has to decide for itself
+ * whether a `published` event is still on. Same rule the public queries use: the run ends
+ * at `endTime` on the final day, and a past-midnight end time counts as the end of that day.
+ */
+export function isEventOver(event: Pick<Event, "date" | "endDate" | "startTime" | "endTime">): boolean {
+  const last = event.endDate ?? event.date;
+  const end = event.endTime < event.startTime ? "23:59" : event.endTime;
+  return isBefore(parseISO(`${last}T${end}`), new Date());
+}
+
+/** Still on: published, and not already run. Everything else is cancelled or finished. */
+export function isEventLive(event: Event): boolean {
+  return event.status === "published" && !isEventOver(event);
 }
 
 /** The one place the detail page words its primary action. */

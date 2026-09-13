@@ -5,7 +5,7 @@ import { isEventFree } from "@/components/common";
 import { EVENT_CATEGORIES } from "@/data/events";
 import { useAdminEvents, useAdminUsers, useReports } from "@/features/admin/queries";
 import { useEmployers } from "@/features/employers/queries";
-import type { Employer, Event, EventCategory, RwandaPlace } from "@/types";
+import type { AdminEventFilters, Employer, Event, EventCategory, RwandaPlace } from "@/types";
 
 export interface CategorySlice {
   category: EventCategory;
@@ -37,6 +37,9 @@ export interface PlatformTotals {
   flagged: number;
 }
 
+/** The store applies the status filter, so nothing on this page re-derives it. */
+const PUBLISHED_ONLY: AdminEventFilters = { statuses: ["published"] };
+
 const EMPTY_EVENTS: Event[] = [];
 const EMPTY_EMPLOYERS: Employer[] = [];
 
@@ -46,15 +49,12 @@ const EMPTY_EMPLOYERS: Employer[] = [];
  * simply isn't on the page.
  */
 export function usePlatformAnalytics() {
-  const eventsQuery = useAdminEvents({});
+  const eventsQuery = useAdminEvents(PUBLISHED_ONLY);
   const usersQuery = useAdminUsers();
   const employersQuery = useEmployers();
   const reportsQuery = useReports();
 
-  const published = useMemo(
-    () => (eventsQuery.data ?? EMPTY_EVENTS).filter((e) => e.status === "published"),
-    [eventsQuery.data],
-  );
+  const published = eventsQuery.data ?? EMPTY_EVENTS;
 
   const totals = useMemo<PlatformTotals>(() => {
     const users = usersQuery.data ?? [];

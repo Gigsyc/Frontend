@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Photo } from "@/components/ui/photo";
 
 interface GalleryProps {
@@ -64,9 +64,9 @@ export function EventGallery({ title, images }: GalleryProps) {
 
       <Dialog open={open} onOpenChange={(next) => setIndex(next ? 0 : null)}>
         <DialogContent size="lg" className="gap-0 p-0 sm:max-w-3xl">
-          <DialogHeader className="px-5 pb-3 pt-5">
+          <DialogHeader className="px-5 pb-3 pr-12 pt-5">
             <DialogTitle className="text-base">{title}</DialogTitle>
-            <p className="text-[13px] text-fg-muted tabular">Photo {(index ?? 0) + 1} of {count}</p>
+            <DialogDescription className="text-[13px] tabular">Photo {(index ?? 0) + 1} of {count}</DialogDescription>
           </DialogHeader>
           <div className="relative">
             <Photo
