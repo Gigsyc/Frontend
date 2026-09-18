@@ -10,18 +10,19 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { EmptyState } from "@/components/ui/empty-state";
 import { FillMeter } from "@/components/ui/progress";
 import { ShiftStatusBadge } from "@/components/ui/status-badge";
+import { useStaggerOnce } from "@/lib/motion";
 import { formatTimeRange } from "@/lib/utils";
 import type { UpcomingShift } from "../use-dashboard";
 
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
-
 export function UpcomingShifts({ items, total }: { items: UpcomingShift[]; total: number }) {
+  const stagger = useStaggerOnce(items.length > 0);
+
   return (
     <Card className="flex flex-col">
       <CardHeader className="flex-row items-start justify-between gap-4">
         <div>
           <CardTitle>Upcoming shifts</CardTitle>
-          <CardDescription>{total ? `Next ${items.length} of ${total} · fill status at a glance` : "Nothing scheduled yet"}</CardDescription>
+          <CardDescription>{total ? `Next ${items.length} of ${total} · who's confirmed for your floor` : "Nothing scheduled yet"}</CardDescription>
         </div>
         <Button variant="ghost" size="sm" asChild><Link href="/employer/jobs">All jobs</Link></Button>
       </CardHeader>
@@ -38,7 +39,7 @@ export function UpcomingShifts({ items, total }: { items: UpcomingShift[]; total
           {items.map(({ shift, confirmed }, i) => {
             const date = parseISO(shift.date);
             return (
-              <motion.li key={shift.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE, delay: Math.min(i, 7) * 0.03 }}>
+              <motion.li key={shift.id} {...stagger(i)}>
                 <Link href={`/employer/jobs/${shift.id}`} className="group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:bg-ink-50">
                   <time dateTime={shift.date} className="flex w-11 shrink-0 flex-col items-center rounded-md bg-navy-50 py-1.5 text-navy-900">
                     <span className="text-[10px] font-semibold uppercase tracking-wider">{format(date, "EEE")}</span>

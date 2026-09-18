@@ -483,6 +483,42 @@ const SEEDS: Seed[] = [
     mode: "free", capacity: 300, attending: 0, organizerId: "emp_urukundo", status: "pending_review", submittedD: -5,
   },
 
+  // ——————————————————————————————— Ikaze Hospitality Group (demo partner) — the rest of their calendar
+  {
+    id: "ev_ikaze_nye", slug: "ikaze-new-years-eve-gala", title: "New Year's Eve Gala at Ikaze",
+    tagline: "Five courses, a live band and the best view of the Kigali fireworks.",
+    description: "A black-tie dinner in the Umucyo Banquet Hall with a jazz quartet through dinner, a DJ after midnight and the terrace open for the fireworks over Kimihurura.",
+    highlights: ["Five-course plated dinner", "Jazz quartet, then a DJ until 03:00", "Terrace access for the midnight fireworks", "Complimentary sparkling wine at midnight"],
+    category: "nightlife", place: "Kigali", venue: "Umucyo Banquet Hall, Ikaze Kimihurura", address: "KG 7 Ave, Kimihurura",
+    d: 109, start: "19:00", end: "03:00", doors: "18:30", img: IMAGES.eventDecor,
+    gallery: [IMAGES.cocktails, IMAGES.bandStage, IMAGES.eventLights],
+    mode: "tickets", tickets: [["Dinner & party", 120000, "Per person"], ["Table of ten", 1100000, "Reserved table with bottle service"]],
+    capacity: 320, attending: 0, organizerId: "emp_ikaze", status: "pending_review", submittedD: -2, age: "18+",
+    staffed: ["sh_ikaze_gala"],
+  },
+  {
+    id: "ev_ikaze_wine", slug: "ikaze-wine-and-dine-evening", title: "Wine & Dine Evening · Inzozi Restaurant",
+    tagline: "Six South African wines, six courses, one long table.",
+    description: "Draft listing. A paired dinner in Inzozi with a visiting sommelier. Menu and final date still being confirmed with the kitchen.",
+    highlights: ["Six wines, six courses", "Visiting sommelier", "One shared table of thirty"],
+    category: "food", place: "Kigali", venue: "Inzozi Restaurant, Ikaze Kimihurura", address: "KG 7 Ave, Kimihurura",
+    d: 34, start: "19:00", end: "22:30", img: IMAGES.foodPlates,
+    gallery: [IMAGES.restaurant, IMAGES.foodVenue],
+    mode: "tickets", tickets: [["Seat", 65000, "All courses and wines"]],
+    capacity: 30, attending: 0, organizerId: "emp_ikaze", status: "draft",
+  },
+  {
+    id: "ev_ikaze_brunchfest", slug: "ikaze-summer-brunch-festival", title: "Ikaze Summer Brunch Festival",
+    tagline: "Three restaurants, one garden, all-you-can-eat brunch.",
+    description: "Our three kitchens set up in the Nyarutarama garden for a day-long brunch with live acoustic sets and a kids' corner.",
+    highlights: ["Three kitchens, one ticket", "Live acoustic sets", "Kids' corner with supervision"],
+    category: "food", place: "Kigali", venue: "Ikaze Nyarutarama Garden", address: "KG 9 Ave, Nyarutarama",
+    d: -41, start: "10:00", end: "16:00", img: IMAGES.foodCommunal,
+    gallery: [IMAGES.catering, IMAGES.familyKids],
+    mode: "tickets", tickets: [["Adult", 35000], ["Child", 15000]],
+    capacity: 400, attending: 386, organizerId: "emp_ikaze", status: "completed",
+  },
+
   // ——————————————————————————————— Drafts, rejected, cancelled
   {
     id: "ev_xmasmarket", slug: "kigali-christmas-market", title: "Kigali Christmas Market",

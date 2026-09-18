@@ -83,6 +83,7 @@ Try: `/events?when=weekend`, `/events?cat=music,food`, `/events?view=saved`, `/e
 | --- | --- |
 | `/employer` | Dashboard — today's shifts, staffing gaps, applications to review |
 | `/employer/jobs` | All shifts: drafts, open, filled, in progress, completed, cancelled |
+| `/employer/events` | All shifts: drafts, open, filled, in progress, completed, cancelled | — a partner's own events: list, detail, and the submit-event wizard at `/employer/events/new`; submissions enter the admin review queue
 | `/employer/jobs/new` | Post a shift (multi-step form; `?from=<shiftId>` duplicates an existing shift) |
 | `/employer/jobs/[id]` | Shift detail. Tabs via `?tab=` — `overview` (default), `staffing`, `attendance` (QR check-in), `review` (approve hours + rate) |
 | `/employer/talent` | Talent pool and worker search |

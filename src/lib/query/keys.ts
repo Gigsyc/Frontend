@@ -47,6 +47,7 @@ export const qk = {
     detail: (slug: string) => ["events", "detail", slug] as const,
     related: (id: string) => ["events", "related", id] as const,
     saved: (userId: string) => ["events", "saved", userId] as const,
+    byOrganizer: (employerId: string) => ["events", "organizer", employerId] as const,
   },
   destinations: {
     all: ["destinations"] as const,

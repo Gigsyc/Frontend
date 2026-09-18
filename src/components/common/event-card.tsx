@@ -82,6 +82,8 @@ interface EventCardProps {
   emphasis?: "default" | "hero";
   className?: string;
   priority?: boolean;
+  /** Where the card links. Defaults to the public event page; the partner workspace passes its own route. */
+  href?: string;
 }
 
 /**
@@ -89,7 +91,7 @@ interface EventCardProps {
  * Hierarchy is deliberate: when it happens, what it is, then where — price last.
  */
 export function EventCard({
-  event, organizerName, saved, onToggleSave, layout = "vertical", emphasis = "default", className, priority,
+  event, organizerName, saved, onToggleSave, layout = "vertical", emphasis = "default", className, priority, href,
 }: EventCardProps) {
   const horizontal = layout === "horizontal";
   const hero = emphasis === "hero";
@@ -100,7 +102,7 @@ export function EventCard({
   return (
     <article className={cn("group relative", className)}>
       <Link
-        href={`/events/${event.slug}`}
+        href={href ?? `/events/${event.slug}`}
         className={cn(
           "flex h-full overflow-hidden rounded-lg bg-surface shadow-card transition-[box-shadow,transform] duration-200 ease-out-soft hover:shadow-raised hover:-translate-y-px focus-visible:outline-none focus-visible:shadow-focus",
           horizontal ? "flex-row items-stretch" : "flex-col",

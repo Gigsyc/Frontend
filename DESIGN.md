@@ -150,3 +150,33 @@ Interests live in `INTERESTS` / `INTEREST_LIST` (`src/data/auth.ts`) with `categ
 
 ## Email verification
 Six-digit code, any six digits accepted. No developer button anywhere in the design.
+
+---
+
+# Iteration 4 — Partner events & the two workspaces
+
+## The gap being closed
+Partners could hire staff but not list events. Now the loop is complete: **partner submits → admin reviews → public sees**. The partner workspace lives at `/employer/*` (`/partner` redirects there).
+
+## Organizer event layer (built, reuse)
+`@/features/events`: `useOrganizerEvents(employerId)`, `useOrganizerEvent(employerId, id)`, `useCreateOrganizerEvent(employerId)`, `useUpdateOrganizerEvent(employerId)`, `useSubmitOrganizerEvent(employerId)`, `useCancelOrganizerEvent(employerId)`. Input type `OrganizerEventInput`. Get `employerId` from `useEmployerSession()`.
+
+Rules the store enforces — do not duplicate them in the UI, but do reflect them:
+- A partner's event enters as `pending_review` or `draft`, never `published`. Only admin publishes.
+- Partners can edit `draft`, `pending_review` and `rejected`. Editing a rejected event resubmits it. Published events are read-only for the partner.
+- Cancelling is the partner's one power over a live event; it leaves `/events` immediately.
+- Every submission notifies the admin persona, so the console's bell moves when a partner acts.
+
+## Two workspaces, two temperatures
+| | Partner (`/employer`) | Admin (`/admin`) |
+|---|---|---|
+| Sidebar | Navy | Light |
+| Voice | Warm, first-person plural, outward: "your next event", "guests" | Neutral, operational: "pending review", "reports" |
+| Imagery | Event cover photos lead. The organiser's own `EmployerMark`. | Thumbnails only |
+| Lead metric | The next event and who is coming | What needs a decision |
+| Amber | Primary action and the date on event cards | Attention badges only |
+
+Partner screens should feel like a promoter's desk, not a moderator's. Use `Photo` for event covers generously; use `EventCard` for the partner's own events where a card fits, and `EventStatusBadge` for status — the same colours the admin sees, so a partner's "Pending review" and the admin's are one thing.
+
+## Status vocabulary for partners (map, don't invent)
+`draft` → "Draft — only you can see this" · `pending_review` → "With GigSyc for review" · `published` → "Live on GigSyc" · `rejected` → "Needs changes" (show the review note) · `cancelled` → "Cancelled" · `completed` → "Finished".

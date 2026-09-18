@@ -18,7 +18,7 @@ import { buildSeed, type SeedState, DEMO_EMPLOYER_ID, DEMO_WORKER_ID } from "@/d
 import { eventMatchesWhen, isPubliclyReachable } from "@/data/events";
 import { ROLES } from "@/data/roles";
 
-const STORAGE_KEY = "gigsyc.prototype.state.v7";
+const STORAGE_KEY = "gigsyc.prototype.state.v8";
 const SEED_DAY_KEY = "gigsyc.prototype.seedDay";
 
 export class MockApiError extends Error {
@@ -593,6 +593,133 @@ class MockStore {
     e.attending += 1;
     this.persist();
     return clone(e);
+  }
+
+
+  // ————————————————————————————————————————————————————————— events (organizer / partner)
+
+  /** Everything this organisation has listed, in any status, soonest first. */
+  async listEventsForOrganizer(employerId: string): Promise<Event[]> {
+    await this.simulate();
+    return clone(this.state.events.filter((e) => e.organizerId === employerId).sort((a, b) => a.date.localeCompare(b.date)));
+  }
+
+  /** A single event, but only if it belongs to the caller — partners never see each other's drafts. */
+  async getOrganizerEvent(employerId: string, id: string): Promise<Event> {
+    await this.simulate();
+    const e = this.state.events.find((x) => x.id === id && x.organizerId === employerId);
+    if (!e) throw new MockApiError("We couldn't find that event in your workspace.", "not_found");
+    return clone(e);
+  }
+
+  /**
+   * A partner submits an event. It enters the admin queue as `pending_review` (or stays a
+   * private `draft`) — it never goes straight to `published`. This is the other half of the
+   * admin→public link: the queue the console reviews is fed from here.
+   */
+  async createOrganizerEvent(
+    employerId: string,
+    input: Omit<Event, "id" | "organizerId" | "status" | "featured" | "attending" | "createdAt" | "submittedAt" | "reviewedAt" | "reviewNote" | "staffedShiftIds"> & { asDraft?: boolean },
+  ): Promise<Event> {
+    await this.simulate();
+    const organizer = this.state.employers.find((e) => e.id === employerId);
+    if (!organizer) throw new MockApiError("Organisation not found", "not_found");
+    const { asDraft, ...fields } = input;
+    const status: EventStatus = asDraft ? "draft" : "pending_review";
+    const slugBase = fields.slug || fields.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const slug = this.state.events.some((e) => e.slug === slugBase) ? `${slugBase}-${nextId("").slice(1)}` : slugBase;
+    const event: Event = {
+      ...fields,
+      slug,
+      id: nextId("ev"),
+      organizerId: employerId,
+      status,
+      featured: false,
+      attending: 0,
+      createdAt: nowIso(),
+      submittedAt: asDraft ? undefined : nowIso(),
+      staffedShiftIds: [],
+    };
+    this.state.events.unshift(event);
+    if (!asDraft) this.notifyAdminsOfSubmission(event, organizer.name);
+    this.persist();
+    return clone(event);
+  }
+
+  /**
+   * Partners may edit anything not yet live. Editing a rejected event resubmits it, so the
+   * admin sees the fix rather than a stale rejection.
+   */
+  async updateOrganizerEvent(employerId: string, id: string, patch: Partial<Event>): Promise<Event> {
+    await this.simulate();
+    const e = this.state.events.find((x) => x.id === id && x.organizerId === employerId);
+    if (!e) throw new MockApiError("We couldn't find that event in your workspace.", "not_found");
+    if (!["draft", "pending_review", "rejected"].includes(e.status)) {
+      throw new MockApiError("Published events can't be edited here. Ask GigSyc to unpublish it first.", "conflict");
+    }
+    const { id: _id, organizerId: _o, status: _s, featured: _f, attending: _a, ...safe } = patch;
+    void _id; void _o; void _s; void _f; void _a;
+    Object.assign(e, safe);
+    if (e.status === "rejected") {
+      e.status = "pending_review";
+      e.submittedAt = nowIso();
+      e.reviewNote = undefined;
+      const organizer = this.state.employers.find((x) => x.id === employerId);
+      this.notifyAdminsOfSubmission(e, organizer?.name ?? "A partner", true);
+    }
+    this.persist();
+    return clone(e);
+  }
+
+  /** Draft → the review queue. */
+  async submitOrganizerEvent(employerId: string, id: string): Promise<Event> {
+    await this.simulate();
+    const e = this.state.events.find((x) => x.id === id && x.organizerId === employerId);
+    if (!e) throw new MockApiError("We couldn't find that event in your workspace.", "not_found");
+    if (e.status !== "draft") throw new MockApiError("Only drafts can be submitted.", "conflict");
+    e.status = "pending_review";
+    e.submittedAt = nowIso();
+    const organizer = this.state.employers.find((x) => x.id === employerId);
+    this.notifyAdminsOfSubmission(e, organizer?.name ?? "A partner");
+    this.persist();
+    return clone(e);
+  }
+
+  /** A partner can cancel their own live or queued event. It disappears from /events at once. */
+  async cancelOrganizerEvent(employerId: string, id: string, reason?: string): Promise<Event> {
+    await this.simulate();
+    const e = this.state.events.find((x) => x.id === id && x.organizerId === employerId);
+    if (!e) throw new MockApiError("We couldn't find that event in your workspace.", "not_found");
+    if (!["published", "pending_review", "draft"].includes(e.status)) {
+      throw new MockApiError("This event can't be cancelled from here.", "conflict");
+    }
+    e.status = "cancelled";
+    e.reviewNote = reason ? `Cancelled by the organiser: ${reason}` : "Cancelled by the organiser.";
+    this.persist();
+    return clone(e);
+  }
+
+  /** Drafts are private, so a partner may simply delete one. Anything submitted stays on record. */
+  async deleteOrganizerDraft(employerId: string, id: string): Promise<void> {
+    await this.simulate();
+    const i = this.state.events.findIndex((x) => x.id === id && x.organizerId === employerId);
+    if (i < 0) throw new MockApiError("We couldn't find that event in your workspace.", "not_found");
+    if (this.state.events[i].status !== "draft") {
+      throw new MockApiError("Only drafts can be deleted. Submitted events can be withdrawn or cancelled instead.", "conflict");
+    }
+    this.state.events.splice(i, 1);
+    this.persist();
+  }
+
+  private notifyAdminsOfSubmission(event: Event, organizerName: string, resubmitted = false) {
+    for (const admin of this.state.platformUsers.filter((u) => u.role === "admin")) {
+      this.state.notifications.unshift({
+        id: nextId("nt"), recipientId: admin.id, kind: "application",
+        title: resubmitted ? `${organizerName} resubmitted an event` : `${organizerName} submitted an event`,
+        body: `${event.title} is waiting for review.`,
+        createdAt: nowIso(), read: false, href: `/admin/events/${event.id}`,
+      });
+    }
   }
 
   // ————————————————————————————————————————————————————————— events (admin)

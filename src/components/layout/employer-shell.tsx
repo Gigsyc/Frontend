@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BarChart3, Briefcase, ChevronsUpDown, CreditCard, LayoutDashboard, LogOut, Menu, Plus, Settings, UserRound, Users } from "lucide-react";
+import { BarChart3, Briefcase, CalendarPlus, CalendarRange, ChevronsUpDown, CreditCard, LayoutDashboard, LogOut, Menu, Plus, Settings, UserRound, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Logo, LogoIcon } from "@/components/brand";
 import { NotificationBell } from "@/components/common/notification-bell";
@@ -19,6 +19,7 @@ import { SidebarNavItem, type NavItemDef } from "./nav-item";
 
 const NAV: NavItemDef[] = [
   { href: "/employer", label: "Overview", icon: LayoutDashboard, nested: false },
+  { href: "/employer/events", label: "Events", icon: CalendarRange },
   { href: "/employer/jobs", label: "Jobs", icon: Briefcase },
   { href: "/employer/talent", label: "Talent", icon: Users },
   { href: "/employer/payments", label: "Payments", icon: CreditCard },
@@ -32,8 +33,11 @@ function Sidebar({ onNavigate, pendingCount }: { onNavigate?: () => void; pendin
       <div className="flex h-16 items-center px-5">
         <Link href="/employer" onClick={onNavigate} aria-label="GigSyc for Business overview"><Logo variant="dark" size="md" /></Link>
       </div>
-      <div className="px-3 pb-2">
+      <div className="flex flex-col gap-2 px-3 pb-2">
         <Button variant="accent" className="w-full justify-start" asChild>
+          <Link href="/employer/events/new" onClick={onNavigate}><CalendarPlus /> Submit an event</Link>
+        </Button>
+        <Button variant="on-dark" className="w-full justify-start" asChild>
           <Link href="/employer/jobs/new" onClick={onNavigate}><Plus /> Post a shift</Link>
         </Button>
       </div>
@@ -42,7 +46,7 @@ function Sidebar({ onNavigate, pendingCount }: { onNavigate?: () => void; pendin
       </nav>
       <div className="mx-3 mb-4 rounded-lg bg-white/[0.06] p-3 text-xs leading-5 text-white/70">
         <p className="font-medium text-white">Prototype workspace</p>
-        <p>Data is simulated and resets daily. Nothing here is billed or sent to real workers.</p>
+        <p>Data is simulated and resets daily. Nothing here is billed, sent to workers, or published without review.</p>
       </div>
     </div>
   );
@@ -106,7 +110,7 @@ export function EmployerShell({ children }: { children: ReactNode }) {
             </Dialog>
             <Link href="/employer" aria-label="Overview"><LogoIcon tone="navy" size={26} /></Link>
           </div>
-          <div className="hidden text-sm text-fg-muted lg:block">GigSyc for Business</div>
+          <div className="hidden text-sm text-fg-muted lg:block">Partner workspace</div>
           <div className="flex items-center gap-1 sm:gap-2">
             <Button size="sm" className="hidden sm:inline-flex lg:hidden" asChild><Link href="/employer/jobs/new"><Plus /> Post a shift</Link></Button>
             <NotificationBell recipientId={employerId} allHref="/employer/notifications" />
